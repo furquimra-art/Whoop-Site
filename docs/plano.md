@@ -9,6 +9,9 @@ Baseado no passo a passo do usuário (guia WHOOP API + Prompt 1 + Prompt 2).
 - [x] `whoop.py`: OAuth2 com escopo `offline`, refresh automático, paginação de 25,
       coleta de recovery, cycles, sleep, workouts, profile e body measurement
 - [x] Código do orbe guardado verbatim em `dashboard/orb-reference.html`
+- [x] Servidor simulado da API + teste ponta a ponta (40 verificações, todas passando)
+- [x] `build_dashboard.py`: dashboard HTML autocontido, com modo `--demo`
+- [x] PDF com o passo a passo: `docs/WHOOP-dashboard-passo-a-passo.pdf`
 
 ## Bloqueado no usuário
 - [ ] Preencher o `.env` com o Client Secret (só na máquina dele)
