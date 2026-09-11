@@ -355,6 +355,172 @@ def fetch_all(days: int) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# Digest — resumo compacto para análise (sem dados pessoais identificáveis)
+# --------------------------------------------------------------------------- #
+
+PII_KEYS = {"email", "first_name", "last_name", "user_id"}
+
+
+def _flatten(obj, prefix="") -> dict:
+    flat = {}
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            name = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, (dict, list)):
+                flat.update(_flatten(value, name))
+            else:
+                flat[name] = value
+    elif isinstance(obj, list):
+        flat[prefix] = f"<list:{len(obj)}>" if obj else None
+    return flat
+
+
+def coverage(records: list) -> dict:
+    """Para cada campo: quantos registros têm valor não-nulo."""
+    total = len(records)
+    counts: dict[str, int] = {}
+    for record in records:
+        for key, value in _flatten(record).items():
+            if key.split(".")[-1] in PII_KEYS:
+                continue
+            counts.setdefault(key, 0)
+            if value not in (None, "", []):
+                counts[key] += 1
+    return {"total": total, "filled": dict(sorted(counts.items()))}
+
+
+def _day(stamp: str | None) -> str | None:
+    return stamp[:10] if stamp else None
+
+
+def _minutes(start: str | None, end: str | None) -> float | None:
+    """Duração em minutos entre dois timestamps RFC3339."""
+    if not (start and end):
+        return None
+    try:
+        fmt = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return round((fmt(end) - fmt(start)).total_seconds() / 60, 1)
+    except ValueError:
+        return None
+
+
+def build_digest(data: dict) -> dict:
+    """Série diária + cobertura de campos, pronta para análise."""
+    by_day: dict[str, dict] = {}
+
+    def slot(day: str) -> dict:
+        return by_day.setdefault(day, {"date": day})
+
+    for cycle in data.get("cycles") or []:
+        day = _day(cycle.get("start"))
+        if not day:
+            continue
+        score = cycle.get("score") or {}
+        entry = slot(day)
+        entry["strain"] = score.get("strain")
+        entry["kilojoule"] = score.get("kilojoule")
+        entry["avg_hr"] = score.get("average_heart_rate")
+        entry["max_hr"] = score.get("max_heart_rate")
+        entry["cycle_score_state"] = cycle.get("score_state")
+
+    cycle_day = {c.get("id"): _day(c.get("start")) for c in (data.get("cycles") or [])}
+    for recovery in data.get("recovery") or []:
+        day = cycle_day.get(recovery.get("cycle_id")) or _day(recovery.get("created_at"))
+        if not day:
+            continue
+        score = recovery.get("score") or {}
+        entry = slot(day)
+        entry["recovery"] = score.get("recovery_score")
+        entry["hrv_ms"] = score.get("hrv_rmssd_milli")
+        entry["rhr"] = score.get("resting_heart_rate")
+        entry["spo2"] = score.get("spo2_percentage")
+        entry["skin_temp_c"] = score.get("skin_temp_celsius")
+        entry["calibrating"] = score.get("user_calibrating")
+
+    for sleep in data.get("sleep") or []:
+        day = _day(sleep.get("end") or sleep.get("start"))
+        if not day:
+            continue
+        score = sleep.get("score") or {}
+        stages = score.get("stage_summary") or {}
+        needed = score.get("sleep_needed") or {}
+        entry = slot(day)
+        entry["nap"] = sleep.get("nap")
+        entry["sleep_duration_min"] = _minutes(sleep.get("start"), sleep.get("end"))
+        entry["sleep_perf_pct"] = score.get("sleep_performance_percentage")
+        entry["sleep_eff_pct"] = score.get("sleep_efficiency_percentage")
+        entry["sleep_consistency_pct"] = score.get("sleep_consistency_percentage")
+        entry["respiratory_rate"] = score.get("respiratory_rate")
+        for src, dst in (
+            ("total_in_bed_time_milli", "in_bed_ms"),
+            ("total_awake_time_milli", "awake_ms"),
+            ("total_light_sleep_time_milli", "light_ms"),
+            ("total_slow_wave_sleep_time_milli", "sws_ms"),
+            ("total_rem_sleep_time_milli", "rem_ms"),
+            ("disturbance_count", "disturbances"),
+        ):
+            if stages.get(src) is not None:
+                entry[dst] = stages.get(src)
+        if needed:
+            entry["sleep_needed_ms"] = sum(
+                v for v in needed.values() if isinstance(v, (int, float))
+            )
+
+    for workout in data.get("workouts") or []:
+        day = _day(workout.get("start"))
+        if not day:
+            continue
+        score = workout.get("score") or {}
+        entry = slot(day)
+        entry.setdefault("workouts", [])
+        entry["workouts"].append({
+            "sport": workout.get("sport_name") or workout.get("sport_id"),
+            "strain": score.get("strain"),
+            "kj": score.get("kilojoule"),
+            "avg_hr": score.get("average_heart_rate"),
+            "max_hr": score.get("max_heart_rate"),
+            "distance_m": score.get("distance_meter"),
+            "duration_min": _minutes(workout.get("start"), workout.get("end")),
+            "start": workout.get("start"),
+            "end": workout.get("end"),
+            "zones": score.get("zone_duration") or score.get("zone_durations"),
+        })
+
+    profile = data.get("profile") or {}
+    body = data.get("body_measurement") or {}
+    return {
+        "fetched_at": data.get("fetched_at"),
+        "range": data.get("range"),
+        "counts": data.get("counts"),
+        "errors": data.get("errors"),
+        "profile_present": bool(profile),
+        "body_measurement": {
+            k: v for k, v in body.items() if k not in PII_KEYS
+        },
+        "coverage": {
+            name: coverage(data.get(name) or [])
+            for name in ("cycles", "recovery", "sleep", "workouts")
+        },
+        "daily": [by_day[d] for d in sorted(by_day)],
+    }
+
+
+def cmd_digest(args) -> None:
+    if not DATA_FILE.exists():
+        die(f"{DATA_FILE.name} não existe. Rode: python3 whoop.py fetch")
+    data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+    digest = build_digest(data)
+    out = ROOT / "whoop_digest.json"
+    out.write_text(json.dumps(digest, indent=1, ensure_ascii=False) + "\n",
+                   encoding="utf-8")
+    print(f"Digest salvo em {out.name} "
+          f"({out.stat().st_size // 1024} KB, {len(digest['daily'])} dias).")
+    print("Não contém e-mail, nome nem user_id.")
+    if args.show:
+        print(json.dumps(digest, ensure_ascii=False, indent=1))
+
+
+# --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
 
@@ -430,6 +596,12 @@ def main() -> None:
     fetch.add_argument("--days", type=int, default=365,
                        help="quantos dias de histórico buscar (padrão: 365)")
     fetch.set_defaults(func=cmd_fetch)
+
+    digest = sub.add_parser(
+        "digest", help="resumo compacto de whoop_data.json, sem dados pessoais")
+    digest.add_argument("--show", action="store_true",
+                        help="imprime o digest na tela além de salvar o arquivo")
+    digest.set_defaults(func=cmd_digest)
 
     args = parser.parse_args()
     try:
