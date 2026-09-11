@@ -1,0 +1,78 @@
+<!--
+  Referência do orbe — código do build Athlete OS, fornecido pelo usuário.
+  Usar VERBATIM no dashboard final, sem improvisar uma versão própria.
+  Único ponto a parametrizar: ORB_COLOR, que deve ser derivado do valor exibido.
+-->
+<div class="orb-stage">
+  <canvas id="orb"></canvas>
+  <div class="orb-mid">
+    <div>
+      <div class="orb-value">28.4</div>
+      <div class="orb-caption">YOUR NUMBER</div>
+    </div>
+  </div>
+</div>
+
+<style>
+.orb-stage{position:relative;width:min(340px,74vw);aspect-ratio:1}
+#orb{position:absolute;inset:0;width:100%;height:100%;display:block}
+.orb-mid{position:absolute;inset:0;display:grid;place-items:center;text-align:center;
+  pointer-events:none}
+.orb-value{font-size:clamp(44px,7vw,62px);font-weight:800;line-height:1;color:#fff;
+  font-variant-numeric:tabular-nums;text-shadow:0 2px 24px rgba(0,0,0,.7)}
+.orb-caption{font-size:10px;letter-spacing:.22em;color:rgba(255,255,255,.72);margin-top:9px}
+</style>
+
+<script>
+(function(){
+  const cv = document.getElementById('orb'), ctx = cv.getContext('2d');
+  const ORB_COLOR = [40, 224, 123];          // r,g,b -- drive this from the value
+  const N = 1500, P = [];
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  for (let i = 0; i < N; i++) {              // uniform points on a sphere
+    const u = Math.random()*2 - 1, th = Math.random()*Math.PI*2, s = Math.sqrt(1 - u*u);
+    P.push({x:s*Math.cos(th), y:s*Math.sin(th), z:u,
+            r:Math.random()*0.55 + 0.75, ph:Math.random()*Math.PI*2});
+  }
+
+  let W = 0, H = 0;
+  function size(){
+    const b = cv.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+    W = b.width; H = b.height; cv.width = W*dpr; cv.height = H*dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  addEventListener('resize', size); size();
+
+  const [cr, cg, cb] = ORB_COLOR;
+  let t = 0;
+  (function frame(){
+    if (!W) size();
+    ctx.clearRect(0, 0, W, H);
+    const cx = W/2, cy = H/2, R = Math.min(W, H)*0.42;
+    const breathe = 1 + Math.sin(t*0.9)*0.026;               // the pulse
+
+    const g = ctx.createRadialGradient(cx, cy, R*0.15, cx, cy, R*1.25);
+    g.addColorStop(0, `rgba(${cr},${cg},${cb},.20)`);
+    g.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R*1.25, 0, 7); ctx.fill();
+
+    const cos = Math.cos(t*0.22), sin = Math.sin(t*0.22), pts = [];
+    for (const p of P) {
+      const x = p.x*cos - p.z*sin, z = p.x*sin + p.z*cos;
+      const rr  = R*breathe*(1 + Math.sin(t*1.5 + p.ph)*0.012);
+      const per = 0.62 + 0.38*(z + 1)/2;                     // fake perspective
+      pts.push({X:cx + x*rr*per, Y:cy + p.y*rr*per, z, r:p.r*per});
+    }
+    pts.sort((a, b) => a.z - b.z);                           // draw back to front
+
+    for (const p of pts) {
+      const a = 0.10 + 0.72*((p.z + 1)/2)**2.1;
+      ctx.beginPath(); ctx.arc(p.X, p.Y, p.r, 0, 7);
+      ctx.fillStyle = p.z > 0.55 ? `rgba(190,255,220,${a})` : `rgba(${cr},${cg},${cb},${a})`;
+      ctx.fill();
+    }
+    if (!reduce) { t += 0.016; requestAnimationFrame(frame); }
+  })();
+})();
+</script>
