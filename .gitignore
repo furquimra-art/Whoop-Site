@@ -1,0 +1,19 @@
+# Credenciais e dados pessoais — NUNCA versionar
+.env
+whoop_tokens.json
+whoop_data.json
+data/*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Sistema / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
