@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WHOOP · painel pessoal</title>
+<style>
+:root{
+  color-scheme: dark;
+  --plane:#0d0d0d; --surface:#101214; --surface-2:#16191c; --line:#23272b;
+  --ink:#f4f5f6; --ink-2:#a8aeb4; --ink-3:#71787e;
+  --s1:#3987e5; --s2:#199e70; --s3:#d95926; --s4:#9085e9;
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --radius:14px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);
+  font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;padding-block:24px;padding-inline:16px}
+.wrap{max-width:1040px;margin:0 auto}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--ink-3);
+  margin-bottom:12px}
+section{margin-bottom:34px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px}
+.muted{color:var(--ink-2)}
+.small{font-size:12.5px}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+
+/* ---------- decisão ---------- */
+.verdict{border:1px solid var(--line);border-radius:var(--radius);padding:20px 20px 18px;
+  background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+.verdict .label{font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--ink-3)}
+.verdict .call{font-size:clamp(21px,3.4vw,30px);font-weight:700;line-height:1.25;
+  margin-top:8px}
+.verdict .why{margin-top:10px;color:var(--ink-2);font-size:14px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:9px;
+  vertical-align:middle}
+
+/* ---------- orbe + rail ---------- */
+.hero{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:26px;
+  align-items:center}
+@media (max-width:760px){.hero{grid-template-columns:1fr;justify-items:center}}
+.rail{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(148px,100%),1fr));gap:10px;
+  width:100%}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  padding:13px 14px}
+.tile .k{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)}
+.tile .v{font-size:23px;font-weight:680;margin-top:5px;font-variant-numeric:tabular-nums}
+.tile .d{font-size:12px;margin-top:3px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.up{color:var(--good)} .down{color:var(--critical)}
+
+/* ---------- gráficos ---------- */
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(400px,100%),1fr));gap:16px}
+.chart-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  margin-bottom:4px;flex-wrap:wrap}
+.chart-title{font-size:14px;font-weight:620}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);
+  margin:2px 0 8px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
+svg{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
+.grid-line{stroke:var(--line);stroke-width:1}
+.axis-text{fill:var(--ink-3);font-size:13px;font-family:inherit}
+.tip{position:fixed;pointer-events:none;background:#05070a;border:1px solid var(--line);
+  border-radius:9px;padding:8px 10px;font-size:12.5px;line-height:1.5;z-index:50;
+  opacity:0;transition:opacity .09s;max-width:230px;box-shadow:0 8px 26px rgba(0,0,0,.6)}
+.tip b{font-variant-numeric:tabular-nums}
+
+/* ---------- controles ---------- */
+details{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px 18px;margin-bottom:14px}
+summary{cursor:pointer;font-weight:600;font-size:14px}
+summary::marker{color:var(--ink-3)}
+.knobs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:16px;
+  margin-top:16px}
+.knob label{display:block;font-size:12.5px;color:var(--ink-2);margin-bottom:6px}
+.knob input[type=range]{width:100%;accent-color:var(--s1)}
+.knob .val{color:var(--ink);font-variant-numeric:tabular-nums}
+.formula{background:#0a0c0e;border:1px solid var(--line);border-left:3px solid var(--s1);
+  border-radius:8px;padding:11px 13px;margin:10px 0;overflow-x:auto}
+.formula .name{font-size:12px;color:var(--ink-2);margin-bottom:5px}
+
+/* ---------- tabelas ---------- */
+table{border-collapse:collapse;width:100%;font-size:12.5px;
+  font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 9px;border-bottom:1px solid var(--line)}
+th{color:var(--ink-3);font-weight:600;font-size:11px;text-transform:uppercase;
+  letter-spacing:.08em}
+.scroll{overflow-x:auto;max-height:340px;overflow-y:auto}
+.bar-cell{display:inline-block;height:8px;border-radius:3px;vertical-align:middle;
+  margin-right:7px}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;
+  border:1px solid var(--line);color:var(--ink-2)}
+.warn{border-color:#4a3a10;background:#1a1508;color:var(--warning)}
+footer{color:var(--ink-3);font-size:12.5px;border-top:1px solid var(--line);
+  padding-top:18px;margin-top:8px}
+ul{margin:8px 0;padding-left:20px} li{margin:5px 0}
+/*__ORB_CSS__*/
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <section id="verdict-slot"></section>
+
+  <section>
+    <div class="hero">
+      <div id="orb-slot"></div>
+      <div class="rail" id="rail"></div>
+    </div>
+  </section>
+
+  <section>
+    <details id="knobs-box">
+      <summary>Suposições e controles — tudo que não é medido está aqui</summary>
+      <p class="small muted" style="margin-top:10px">
+        Nada abaixo vem do WHOOP. São escolhas minhas, expostas para você mudar.
+        A página recalcula na hora e não salva nada em lugar nenhum.
+      </p>
+      <div class="knobs" id="knobs"></div>
+    </details>
+    <details id="formula-box">
+      <summary>Fórmulas — como cada número acima foi calculado</summary>
+      <div id="formulas"></div>
+    </details>
+  </section>
+
+  <section>
+    <h2>Tendências</h2>
+    <div class="charts" id="charts"></div>
+  </section>
+
+  <section>
+    <h2>Qualidade dos dados</h2>
+    <div class="card" id="quality"></div>
+  </section>
+
+  <section>
+    <h2>Tabela dos últimos dias</h2>
+    <div class="card scroll" id="table-slot"></div>
+  </section>
+
+  <footer id="provenance"></footer>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+const DATA = /*__DATA__*/;
+
+/* ========================================================================== *
+ * Configuração: cada entrada é uma suposição, não um dado medido.
+ * ========================================================================== */
+const CONFIG = [
+  {key:"wRecovery", label:"Peso do recovery no índice", min:0, max:100, step:5, value:50, unit:"%"},
+  {key:"wSleep",    label:"Peso do sono no índice",     min:0, max:100, step:5, value:30, unit:"%"},
+  {key:"wBalance",  label:"Peso do equilíbrio de carga", min:0, max:100, step:5, value:20, unit:"%"},
+  {key:"acuteDays",   label:"Janela da carga aguda",   min:3,  max:14, step:1, value:7,  unit:" d"},
+  {key:"chronicDays", label:"Janela da carga crônica", min:14, max:56, step:7, value:28, unit:" d"},
+  {key:"acwrLo", label:"Piso da faixa segura de carga", min:0.5, max:1.0, step:0.05, value:0.80, unit:""},
+  {key:"acwrHi", label:"Teto da faixa segura de carga", min:1.0, max:1.8, step:0.05, value:1.30, unit:""},
+  {key:"debtDays",    label:"Janela da dívida de sono", min:3, max:21, step:1, value:7,  unit:" d"},
+  {key:"baselineDays",label:"Janela da sua linha de base", min:7, max:90, step:1, value:30, unit:" d"},
+  {key:"pushAt", label:"Índice a partir do qual treinar forte", min:50, max:90, step:1, value:70, unit:""},
+  {key:"holdAt", label:"Índice a partir do qual manter o plano", min:30, max:70, step:1, value:50, unit:""},
+  {key:"window", label:"Dias visíveis nos gráficos", min:14, max:180, step:7, value:60, unit:" d"},
+];
+const cfg = {};
+CONFIG.forEach(c => cfg[c.key] = c.value);
+
+/* ========================================================================== *
+ * Utilidades
+ * ========================================================================== */
+const S = DATA.series;
+const num = v => (typeof v === "number" && isFinite(v)) ? v : null;
+const has = (rows, field) => rows.some(r => num(r[field]) !== null);
+const last = (rows, field) => {
+  for (let i = rows.length - 1; i >= 0; i--) if (num(rows[i][field]) !== null)
+    return {value: rows[i][field], date: rows[i].date, back: rows.length - 1 - i};
+  return null;
+};
+const mean = xs => xs.length ? xs.reduce((a,b)=>a+b,0) / xs.length : null;
+const sd = xs => {
+  if (xs.length < 2) return null;
+  const m = mean(xs);
+  return Math.sqrt(xs.reduce((a,b)=>a+(b-m)**2,0) / (xs.length - 1));
+};
+const tail = (field, days, upTo) => {
+  const end = upTo === undefined ? S.length : upTo;
+  return S.slice(Math.max(0, end - days), end)
+          .map(r => num(r[field])).filter(v => v !== null);
+};
+const fmt = (v, d=0) => v === null || v === undefined ? "—" : v.toFixed(d);
+const esc = s => String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* ========================================================================== *
+ * Métricas modeladas — cada uma tem a fórmula declarada junto
+ * ========================================================================== */
+const FORMULAS = [];
+
+function balanceScore() {
+  const acute = mean(tail("strain", cfg.acuteDays));
+  const chronic = mean(tail("strain", cfg.chronicDays));
+  if (acute === null || chronic === null || chronic === 0) return {score:null};
+  const ratio = acute / chronic;
+  let score;
+  if (ratio >= cfg.acwrLo && ratio <= cfg.acwrHi) score = 100;
+  else if (ratio < cfg.acwrLo) score = Math.max(0, 100 - (cfg.acwrLo - ratio) / cfg.acwrLo * 100);
+  else score = Math.max(0, 100 - (ratio - cfg.acwrHi) / cfg.acwrHi * 100);
+  return {score, ratio, acute, chronic};
+}
+
+function sleepDebt() {
+  let debt = 0, counted = 0;
+  for (const row of S.slice(-cfg.debtDays)) {
+    const need = num(row.sleep_needed_hours), got = num(row.asleep_hours);
+    if (need === null || got === null) continue;
+    debt += Math.max(0, need - got);
+    counted++;
+  }
+  return counted ? {hours: debt, nights: counted} : {hours: null, nights: 0};
+}
+
+function readiness() {
+  const total = cfg.wRecovery + cfg.wSleep + cfg.wBalance;
+  if (!total) return {score:null};
+  const rec = last(S, "recovery_score");
+  const slp = last(S, "sleep_performance_percentage");
+  const bal = balanceScore();
+  const parts = [];
+  if (rec) parts.push({w: cfg.wRecovery, v: rec.value, name: "recovery_score"});
+  if (slp) parts.push({w: cfg.wSleep, v: slp.value, name: "sleep_performance_percentage"});
+  if (bal.score !== null) parts.push({w: cfg.wBalance, v: bal.score, name: "equilíbrio de carga"});
+  const w = parts.reduce((a,p)=>a+p.w, 0);
+  if (!w) return {score:null};
+  return {
+    score: parts.reduce((a,p)=>a + p.w * p.v, 0) / w,
+    parts, weightSum: w, recovery: rec, sleep: slp, balance: bal
+  };
+}
+
+function baseline(field) {
+  const window = tail(field, cfg.baselineDays, S.length - 1);
+  return {mean: mean(window), sd: sd(window), n: window.length};
+}
+
+/* ========================================================================== *
+ * Render
+ * ========================================================================== */
+function colorFor(score) {
+  if (score === null) return [113,120,126];
+  if (score >= cfg.pushAt) return [12,163,12];
+  if (score >= cfg.holdAt) return [250,178,25];
+  return [208,59,59];
+}
+
+function renderVerdict(r) {
+  const el = document.getElementById("verdict-slot");
+  if (r.score === null) {
+    el.innerHTML = `<div class="verdict"><div class="label">Decisão de hoje</div>
+      <div class="call">Sem dados suficientes para uma recomendação.</div>
+      <div class="why">Falta recovery, sono ou strain recente no arquivo.</div></div>`;
+    return;
+  }
+  const [rr,gg,bb] = colorFor(r.score);
+  const call = r.score >= cfg.pushAt ? "Treine forte hoje."
+             : r.score >= cfg.holdAt ? "Mantenha o que estava planejado."
+             : "Recue hoje. Volume leve ou descanso.";
+  const bits = [];
+  if (r.recovery) bits.push(`recovery ${fmt(r.recovery.value)}%`);
+  if (r.sleep) bits.push(`sono ${fmt(r.sleep.value)}% do necessário`);
+  if (r.balance.score !== null) bits.push(`carga aguda/crônica ${fmt(r.balance.ratio,2)}`);
+  const stale = r.recovery && r.recovery.back > 0
+    ? ` <span class="tag warn">dado mais recente é de ${r.recovery.date}</span>` : "";
+  el.innerHTML = `<div class="verdict">
+    <div class="label">Decisão de hoje</div>
+    <div class="call"><span class="dot" style="background:rgb(${rr},${gg},${bb})"></span>${call}</div>
+    <div class="why">Índice de prontidão <b>${fmt(r.score)}</b> de 100, a partir de
+      ${bits.join(", ")}.${stale}</div></div>`;
+}
+
+function renderOrb(r) {
+  const [rr,gg,bb] = colorFor(r.score);
+  window.ORB_COLOR = [rr,gg,bb];
+  const slot = document.getElementById("orb-slot");
+  if (!slot.querySelector("canvas")) {
+    slot.innerHTML = `<div class="orb-stage"><canvas id="orb"></canvas>
+      <div class="orb-mid"><div>
+        <div class="orb-value" id="orb-value">—</div>
+        <div class="orb-caption">PRONTIDÃO</div>
+      </div></div></div>`;
+    window.__startOrb && window.__startOrb();
+  }
+  document.getElementById("orb-value").textContent =
+    r.score === null ? "—" : Math.round(r.score);
+}
+
+function tile(k, v, d, cls) {
+  return `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div>
+    <div class="d ${cls||""}">${d||""}</div></div>`;
+}
+
+function renderRail(r) {
+  const out = [];
+  const compare = (field, label, unit, decimals, lowerIsBetter) => {
+    const cur = last(S, field);
+    if (!cur) return;
+    const base = baseline(field);
+    if (base.mean === null) { out.push(tile(label, fmt(cur.value,decimals)+unit, "")); return; }
+    const delta = cur.value - base.mean;
+    const better = lowerIsBetter ? delta < 0 : delta > 0;
+    const sign = delta >= 0 ? "+" : "−";
+    out.push(tile(label, fmt(cur.value,decimals)+unit,
+      `${sign}${fmt(Math.abs(delta),decimals)}${unit} vs média de ${base.n} d`,
+      Math.abs(delta) < (base.sd||0)*0.35 ? "" : (better ? "up" : "down")));
+  };
+  compare("recovery_score", "Recovery", "%", 0, false);
+  compare("strain", "Strain", "", 1, false);
+  compare("asleep_hours", "Sono", " h", 1, false);
+  compare("hrv_rmssd_milli", "HRV (rmssd)", " ms", 0, false);
+  compare("resting_heart_rate", "FC repouso", " bpm", 0, true);
+  const debt = sleepDebt();
+  if (debt.hours !== null)
+    out.push(tile("Dívida de sono", fmt(debt.hours,1)+" h",
+      `acumulada em ${debt.nights} noite${debt.nights>1?"s":""}`,
+      debt.hours > 4 ? "down" : ""));
+  document.getElementById("rail").innerHTML = out.join("");
+}
+
+/* ---------- gráficos em SVG ---------- */
+const TIP = document.getElementById("tip");
+function showTip(html, evt) {
+  TIP.innerHTML = html; TIP.style.opacity = 1;
+  const pad = 14, w = TIP.offsetWidth, h = TIP.offsetHeight;
+  let x = evt.clientX + pad, y = evt.clientY - h - pad;
+  if (x + w > innerWidth - 8) x = evt.clientX - w - pad;
+  if (y < 8) y = evt.clientY + pad;
+  TIP.style.left = x + "px"; TIP.style.top = y + "px";
+}
+const hideTip = () => TIP.style.opacity = 0;
+
+function chartFrame(title, note, legend, inner) {
+  return `<div class="card">
+    <div class="chart-head"><div class="chart-title">${title}</div>
+      <div class="small muted">${note||""}</div></div>
+    ${legend||""}${inner}</div>`;
+}
+
+function lineChart(opts) {
+  const rows = S.slice(-cfg.window);
+  const series = opts.series.filter(s => has(rows, s.field));
+  if (!series.length) return "";
+  const W = 520, H = 178, L = 40, R = 10, T = 12, B = 26;
+  const values = series.flatMap(s => rows.map(r => num(r[s.field])).filter(v=>v!==null));
+  let lo = Math.min(...values), hi = Math.max(...values);
+  const pad = (hi - lo) * 0.12 || 1;
+  hi += pad;
+  lo = opts.zero ? 0 : lo - pad;   // strain e horas nunca são negativos
+  const X = i => L + i * (W - L - R) / Math.max(1, rows.length - 1);
+  const Y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo || 1));
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.title)}">`;
+  for (let g = 0; g <= 3; g++) {
+    const v = lo + (hi - lo) * g / 3;
+    svg += `<line class="grid-line" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/>
+      <text class="axis-text" x="2" y="${Y(v)+4.5}">${fmt(v, opts.decimals||0)}</text>`;
+  }
+  for (const s of series) {
+    let d = "", open = false;
+    rows.forEach((r,i) => {
+      const v = num(r[s.field]);
+      if (v === null) { open = false; return; }
+      d += (open ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1) + " ";
+      open = true;
+    });
+    svg += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round"
+      ${s.dashed?'stroke-dasharray="5 4" opacity=".75"':""}/>`;
+  }
+  const step = Math.max(1, Math.ceil(rows.length / 4));
+  rows.forEach((r,i) => { if (i % step === 0 || i === rows.length-1)
+    svg += `<text class="axis-text" x="${X(i)}" y="${H-8}" text-anchor="middle">${r.date.slice(5)}</text>`; });
+  // camada de hover: uma faixa por dia
+  rows.forEach((r,i) => {
+    const body = series.map(s => num(r[s.field]) === null ? "" :
+      `<div><span style="color:${s.color}">■</span> ${s.label}:
+        <b>${fmt(r[s.field], opts.decimals||0)}${opts.unit||""}</b></div>`).join("");
+    if (!body.trim()) return;
+    svg += `<rect x="${X(i)-(W-L-R)/rows.length/2}" y="${T}"
+      width="${(W-L-R)/rows.length}" height="${H-T-B}" fill="transparent"
+      data-tip="${esc(`<b>${r.date}</b>${body}`)}"/>`;
+  });
+  svg += `</svg>`;
+  const legend = series.length > 1
+    ? `<div class="legend">${series.map(s=>`<span><i style="background:${s.color}"></i>${s.label}</span>`).join("")}</div>`
+    : "";
+  return chartFrame(opts.title, opts.note, legend, svg);
+}
+
+function recoveryChart() {
+  const rows = S.slice(-cfg.window);
+  if (!has(rows, "recovery_score")) return "";
+  const W = 520, H = 178, L = 40, R = 10, T = 12, B = 26;
+  const bw = (W - L - R) / rows.length;
+  const Y = v => T + (H - T - B) * (1 - v / 100);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Recovery diário">`;
+  [0,34,67,100].forEach(v => {
+    svg += `<line class="grid-line" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/>
+      <text class="axis-text" x="2" y="${Y(v)+4.5}">${v}</text>`;
+  });
+  rows.forEach((r,i) => {
+    const v = num(r.recovery_score); if (v === null) return;
+    const color = v >= 67 ? "var(--good)" : v >= 34 ? "var(--warning)" : "var(--critical)";
+    const band = v >= 67 ? "verde" : v >= 34 ? "amarelo" : "vermelho";
+    const h = Math.max(2, H - B - Y(v));
+    svg += `<rect x="${(L + i*bw + 1).toFixed(1)}" y="${Y(v).toFixed(1)}"
+      width="${Math.max(1.5, bw-2).toFixed(1)}" height="${h.toFixed(1)}" rx="3"
+      fill="${color}" data-tip="${esc(`<b>${r.date}</b><div>recovery_score: <b>${v}%</b> (${band})</div>` +
+        (num(r.hrv_rmssd_milli)!==null?`<div>HRV: <b>${fmt(r.hrv_rmssd_milli,1)} ms</b></div>`:"") +
+        (num(r.resting_heart_rate)!==null?`<div>FC repouso: <b>${r.resting_heart_rate} bpm</b></div>`:""))}"/>`;
+  });
+  const step = Math.max(1, Math.ceil(rows.length / 4));
+  rows.forEach((r,i) => { if (i % step === 0 || i === rows.length-1)
+    svg += `<text class="axis-text" x="${L+i*bw+bw/2}" y="${H-8}" text-anchor="middle">${r.date.slice(5)}</text>`; });
+  svg += `</svg>`;
+  const legend = `<div class="legend">
+    <span><i style="background:var(--good)"></i>verde, 67% ou mais</span>
+    <span><i style="background:var(--warning)"></i>amarelo, 34 a 66%</span>
+    <span><i style="background:var(--critical)"></i>vermelho, abaixo de 34%</span></div>`;
+  return chartFrame("Recovery diário", "faixas do próprio WHOOP", legend, svg);
+}
+
+function renderCharts() {
+  const out = [recoveryChart()];
+  out.push(lineChart({title:"Strain do dia", field:"strain", decimals:1, zero:true,
+    note:`escala 0 a 21`, series:[{field:"strain", label:"strain", color:"var(--s1)"}]}));
+  out.push(lineChart({title:"Sono: dormido x necessário", decimals:1, unit:" h",
+    note:"o necessário vem do WHOOP", series:[
+      {field:"asleep_hours", label:"dormido", color:"var(--s4)"},
+      {field:"sleep_needed_hours", label:"necessário", color:"var(--ink-2)", dashed:true}]}));
+  out.push(lineChart({title:"HRV em repouso", field:"hrv_rmssd_milli", decimals:0,
+    unit:" ms", note:"hrv_rmssd_milli",
+    series:[{field:"hrv_rmssd_milli", label:"HRV", color:"var(--s2)"}]}));
+  out.push(lineChart({title:"Frequência cardíaca de repouso", decimals:0, unit:" bpm",
+    note:"resting_heart_rate",
+    series:[{field:"resting_heart_rate", label:"FC repouso", color:"var(--s3)"}]}));
+  if (has(S, "respiratory_rate"))
+    out.push(lineChart({title:"Frequência respiratória no sono", decimals:1,
+      unit:" rpm", note:"respiratory_rate",
+      series:[{field:"respiratory_rate", label:"resp.", color:"var(--s2)"}]}));
+  if (has(S, "skin_temp_celsius"))
+    out.push(lineChart({title:"Temperatura da pele", decimals:1, unit:" °C",
+      note:"skin_temp_celsius",
+      series:[{field:"skin_temp_celsius", label:"pele", color:"var(--s3)"}]}));
+  if (has(S, "spo2_percentage"))
+    out.push(lineChart({title:"Saturação de oxigênio", decimals:1, unit:" %",
+      note:"spo2_percentage",
+      series:[{field:"spo2_percentage", label:"SpO₂", color:"var(--s1)"}]}));
+  document.getElementById("charts").innerHTML = out.filter(Boolean).join("");
+  document.querySelectorAll("[data-tip]").forEach(el => {
+    el.addEventListener("mousemove", e => showTip(el.dataset.tip, e));
+    el.addEventListener("mouseleave", hideTip);
+    el.addEventListener("touchstart", e => showTip(el.dataset.tip, e.touches[0]),
+      {passive:true});
+  });
+}
+
+function renderFormulas(r) {
+  const bal = r.balance || balanceScore();
+  const debt = sleepDebt();
+  const box = (name, text) => `<div class="formula"><div class="name">${name}</div>
+    <div class="mono">${text}</div></div>`;
+  let html = "";
+  if (r.score !== null) {
+    const terms = r.parts.map(p =>
+      `${(p.w/r.weightSum).toFixed(2)} × ${p.name}(${fmt(p.v,1)})`).join("  +  ");
+    html += box("Índice de prontidão — modelado por mim, não é um número do WHOOP",
+      `prontidão = ${terms} = <b>${fmt(r.score,1)}</b><br>
+       pesos normalizados para somar 1; um componente ausente sai da conta`);
+  }
+  if (bal.score !== null) {
+    html += box("Equilíbrio de carga (razão aguda/crônica)",
+      `aguda = média do strain dos últimos ${cfg.acuteDays} dias = ${fmt(bal.acute,2)}<br>
+       crônica = média do strain dos últimos ${cfg.chronicDays} dias = ${fmt(bal.chronic,2)}<br>
+       razão = aguda ÷ crônica = <b>${fmt(bal.ratio,2)}</b><br>
+       nota = 100 dentro da faixa ${cfg.acwrLo}–${cfg.acwrHi}, caindo em proporção fora
+       dela = <b>${fmt(bal.score,1)}</b>`);
+  }
+  if (debt.hours !== null) {
+    html += box("Dívida de sono",
+      `dívida = Σ máx(0, sleep_needed − dormido) nas últimas ${cfg.debtDays} noites
+       = <b>${fmt(debt.hours,2)} h</b> em ${debt.nights} noites<br>
+       dormido = total_in_bed_time_milli − total_awake_time_milli<br>
+       sleep_needed = baseline + dívida + strain recente + cochilo, todos do WHOOP`);
+  }
+  html += box("Comparação com a sua linha de base",
+    `média e desvio padrão dos últimos ${cfg.baselineDays} dias, excluindo o dia atual;
+     a seta só fica colorida quando a diferença passa de 0,35 desvio padrão`);
+  html += box("Decisão do topo",
+    `prontidão ≥ ${cfg.pushAt} → treinar forte<br>
+     prontidão ≥ ${cfg.holdAt} → manter o planejado<br>
+     abaixo disso → recuar`);
+  document.getElementById("formulas").innerHTML = html;
+}
+
+function renderQuality() {
+  const c = DATA.coverage, total = c.total_days;
+  const first = S[0].date, latest = S[S.length-1].date;
+  const rows = Object.entries(c.fields).map(([field, filled]) => {
+    const pct = total ? filled/total*100 : 0;
+    const color = pct > 90 ? "var(--good)" : pct > 40 ? "var(--warning)" : "var(--critical)";
+    return `<tr><td class="mono">${field}</td>
+      <td><span class="bar-cell" style="width:${Math.max(2,pct*0.9).toFixed(0)}px;
+        background:${color}"></span>${filled} de ${total}</td>
+      <td>${pct.toFixed(0)}%</td></tr>`;
+  }).join("");
+  const errs = Object.keys(DATA.errors||{}).length
+    ? `<p class="small" style="color:var(--warning)">Erros na coleta:
+       ${esc(JSON.stringify(DATA.errors))}</p>` : "";
+  const body = DATA.body_measurement || {};
+  const bodyBits = Object.entries(body).filter(([,v]) => v !== null && v !== undefined)
+    .map(([k,v]) => `${k}: <b>${v}</b>`).join(" · ");
+  document.getElementById("quality").innerHTML = `
+    <p class="small muted"><b>${total}</b> dias no arquivo, de <b>${first}</b> a
+      <b>${latest}</b>. Coletado em ${esc((DATA.fetched_at||"").slice(0,16).replace("T"," "))}.</p>
+    ${bodyBits ? `<p class="small muted">Medidas corporais — ${bodyBits}</p>` : ""}
+    ${errs}
+    <div class="scroll"><table><thead><tr><th>campo</th><th>dias preenchidos</th>
+      <th>%</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderTable() {
+  const cols = [
+    ["date","dia"], ["recovery_score","rec %"], ["strain","strain"],
+    ["asleep_hours","sono h"], ["sleep_needed_hours","precisa h"],
+    ["hrv_rmssd_milli","HRV"], ["resting_heart_rate","FC rep"],
+    ["sleep_efficiency_percentage","efic %"], ["disturbance_count","pert."],
+  ].filter(([f]) => f === "date" || has(S, f));
+  const rows = S.slice(-30).reverse().map(r => `<tr>${cols.map(([f]) => {
+    const v = r[f];
+    return `<td>${v === null || v === undefined ? "—" :
+      (typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(1)) : v)}</td>`;
+  }).join("")}</tr>`).join("");
+  document.getElementById("table-slot").innerHTML =
+    `<table><thead><tr>${cols.map(([,l])=>`<th>${l}</th>`).join("")}</tr></thead>
+     <tbody>${rows}</tbody></table>`;
+}
+
+function renderProvenance() {
+  const measured = ["recovery_score", "hrv_rmssd_milli", "resting_heart_rate",
+    "strain", "kilojoule", "asleep_hours", "sleep_needed_hours",
+    "sleep_performance_percentage", "sleep_efficiency_percentage",
+    "respiratory_rate", "disturbance_count", "spo2_percentage",
+    "skin_temp_celsius"].filter(f => has(S, f));
+  document.getElementById("provenance").innerHTML = `
+    <p><b>Medido pelo WHOOP</b>, vindo direto da API sem transformação além de
+      converter milissegundos em horas:</p>
+    <p class="mono">${measured.join(" · ")}</p>
+    <p><b>Modelado por mim</b>, ou seja, não existe no WHOOP e depende dos
+      controles acima:</p>
+    <ul>
+      <li>o índice de prontidão e os seus pesos;</li>
+      <li>a razão de carga aguda sobre crônica e a faixa considerada segura;</li>
+      <li>a dívida de sono acumulada na janela escolhida;</li>
+      <li>os limites que separam treinar forte, manter e recuar;</li>
+      <li>a linha de base de comparação e o corte de 0,35 desvio padrão.</li>
+    </ul>
+    <p>Gerado em ${esc(DATA.generated_at)} a partir do seu whoop_data.json.
+      Nenhum dado sai desta página.</p>`;
+}
+
+/* ========================================================================== *
+ * Controles
+ * ========================================================================== */
+function renderKnobs() {
+  document.getElementById("knobs").innerHTML = CONFIG.map(c => `
+    <div class="knob">
+      <label for="k-${c.key}">${c.label}:
+        <span class="val" id="v-${c.key}">${c.value}${c.unit}</span></label>
+      <input type="range" id="k-${c.key}" min="${c.min}" max="${c.max}"
+        step="${c.step}" value="${c.value}">
+    </div>`).join("");
+  CONFIG.forEach(c => {
+    document.getElementById("k-"+c.key).addEventListener("input", e => {
+      cfg[c.key] = parseFloat(e.target.value);
+      document.getElementById("v-"+c.key).textContent =
+        (c.step < 1 ? cfg[c.key].toFixed(2) : cfg[c.key]) + c.unit;
+      render();
+    });
+  });
+}
+
+function render() {
+  const r = readiness();
+  renderVerdict(r); renderOrb(r); renderRail(r);
+  renderFormulas(r); renderCharts();
+}
+
+renderKnobs();
+render();
+renderQuality();
+renderTable();
+renderProvenance();
+</script>
+
+<script>
+/* O orbe abaixo é o código de referência fornecido, usado como está.
+   Duas linhas mudaram, ambas para que a cor siga o valor exibido:
+   ORB_COLOR deixou de ser constante e passou a ser lido a cada quadro. */
+window.__startOrb = function(){
+/*__ORB_JS__*/
+};
+window.__startOrb();
+</script>
+</body>
+</html>
