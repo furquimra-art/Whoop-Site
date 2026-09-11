@@ -63,6 +63,30 @@ Python 3.9+. Sem dependências externas — o script usa só a biblioteca padrã
    `refresh_token` (escopo `offline`), então os próximos `fetch` não exigem
    voltar ao navegador.
 
+6. **Gerar o dashboard**
+
+   ```bash
+   python3 build_dashboard.py
+   ```
+
+   Escreve `dashboard/index.html`, um arquivo só, que abre com dois cliques e
+   não precisa de servidor nem internet.
+
+   Para ver o layout antes de ter dados, com números falsos e um aviso no topo:
+
+   ```bash
+   python3 build_dashboard.py --demo
+   ```
+
+## Testes
+
+```bash
+python3 tests/test_e2e.py
+```
+
+Sobe um servidor que imita a API do WHOOP e roda o `whoop.py` de verdade contra
+ele, num diretório temporário. Não toca na sua conta nem nos seus arquivos.
+
 ## Comandos
 
 | Comando | O que faz |

@@ -187,13 +187,45 @@ def extract_orb() -> dict:
 # Geração
 # --------------------------------------------------------------------------- #
 
-def main() -> int:
-    if not DATA_FILE.exists():
-        print(f"ERRO: {DATA_FILE.name} não existe. Rode antes:\n"
-              f"  python3 whoop.py fetch", file=sys.stderr)
-        return 1
+BANNER = (
+    '<div class="demo-banner"><b>Demonstração.</b> Estes números são sintéticos, '
+    'gerados por tests/mock_whoop.py só para você ver o layout. Nada aqui é seu. '
+    'O seu dashboard de verdade sai em dashboard/index.html depois do '
+    '<span class="mono">python3 whoop.py fetch</span>.</div>')
 
-    data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+
+def demo_data() -> dict:
+    """Histórico sintético do servidor de teste, para pré-visualizar o layout."""
+    sys.path.insert(0, str(ROOT / "tests"))
+    import mock_whoop  # noqa: PLC0415
+
+    history = mock_whoop.build_history()
+    return {
+        "fetched_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "cycles": history["cycle"],
+        "recovery": history["recovery"],
+        "sleep": history["activity/sleep"],
+        "workouts": history["activity/workout"],
+        "profile": {}, "errors": {},
+        "body_measurement": {"height_meter": 1.78, "weight_kilogram": 76.4,
+                             "max_heart_rate": 191},
+        "counts": {k: len(v) for k, v in history.items()},
+    }
+
+
+def main() -> int:
+    demo = "--demo" in sys.argv
+    if demo:
+        data = demo_data()
+    elif not DATA_FILE.exists():
+        print(f"ERRO: {DATA_FILE.name} não existe. Rode antes:\n"
+              f"  python3 whoop.py fetch\n"
+              f"Para só ver o layout com dados falsos:\n"
+              f"  python3 build_dashboard.py --demo", file=sys.stderr)
+        return 1
+    else:
+        data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+
     series = build_series(data)
     if not series:
         print("ERRO: nenhum dia encontrado no whoop_data.json.", file=sys.stderr)
@@ -219,13 +251,16 @@ def main() -> int:
     html = (template
             .replace("/*__ORB_CSS__*/", orb.get("css", ""))
             .replace("/*__ORB_JS__*/", orb.get("js", ""))
+            .replace("<!--__BANNER__-->", BANNER if demo else "")
             .replace("/*__DATA__*/", json.dumps(payload, ensure_ascii=False)))
 
-    OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    OUT_FILE.write_text(html, encoding="utf-8")
-    size_kb = OUT_FILE.stat().st_size // 1024
-    print(f"Dashboard gerado: {OUT_FILE}  ({size_kb} KB, {len(series)} dias)")
-    print(f"Abra com: xdg-open {OUT_FILE}   (ou clique duas vezes no arquivo)")
+    out = OUT_FILE.with_name("demo.html") if demo else OUT_FILE
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding="utf-8")
+    size_kb = out.stat().st_size // 1024
+    label = "Demonstração gerada" if demo else "Dashboard gerado"
+    print(f"{label}: {out}  ({size_kb} KB, {len(series)} dias)")
+    print(f"Abra com: xdg-open {out}   (ou clique duas vezes no arquivo)")
     return 0
 
 
