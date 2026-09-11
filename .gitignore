@@ -2,6 +2,7 @@
 .env
 whoop_tokens.json
 whoop_data.json
+whoop_digest.json
 data/*.json
 
 # Python
