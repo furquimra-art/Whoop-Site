@@ -36,9 +36,14 @@ from typing import NoReturn
 # Constantes da API do WHOOP
 # --------------------------------------------------------------------------- #
 
-AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2/auth"
-TOKEN_URL = "https://api.prod.whoop.com/oauth/oauth2/token"
-API_ROOT = "https://api.prod.whoop.com/developer"
+# As três URLs podem ser sobrescritas por variável de ambiente — é assim que a
+# suíte de testes aponta o script para um servidor simulado, sem rede.
+AUTH_URL = os.environ.get(
+    "WHOOP_AUTH_URL", "https://api.prod.whoop.com/oauth/oauth2/auth")
+TOKEN_URL = os.environ.get(
+    "WHOOP_TOKEN_URL", "https://api.prod.whoop.com/oauth/oauth2/token")
+API_ROOT = os.environ.get(
+    "WHOOP_API_ROOT", "https://api.prod.whoop.com/developer")
 
 # "offline" é o que garante o refresh_token. Sem ele, você teria de reautorizar
 # no navegador a cada ~1 hora.
@@ -229,17 +234,27 @@ def refresh_tokens() -> dict:
     tokens = read_tokens()
     if not tokens or not tokens.get("refresh_token"):
         die("Sem refresh_token salvo. Rode 'python3 whoop.py url' e autorize de novo.")
-    payload = http(
-        TOKEN_URL,
-        method="POST",
-        data={
-            "grant_type": "refresh_token",
-            "refresh_token": tokens["refresh_token"],
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "scope": "offline",
-        },
-    )
+    try:
+        payload = http(
+            TOKEN_URL,
+            method="POST",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": tokens["refresh_token"],
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "scope": "offline",
+            },
+        )
+    except HttpError as exc:
+        # Falha de autenticação é fatal: sem isso o fetch seguiria adiante e
+        # gravaria um whoop_data.json só de erros, parecendo ter dado certo.
+        die(
+            f"não consegui renovar o token ({exc.status}): {exc.detail[:200]}\n"
+            f"O refresh_token provavelmente foi revogado ou rotacionado fora "
+            f"deste script.\nApague o {TOKEN_FILE.name}, rode "
+            f"'python3 whoop.py url' e autorize de novo."
+        )
     return save_tokens(payload)
 
 
@@ -589,6 +604,10 @@ def cmd_status(_args) -> None:
 
 def cmd_fetch(args) -> None:
     data = fetch_all(args.days)
+    collections = ("cycles", "recovery", "sleep", "workouts")
+    if all(name in data["errors"] for name in collections):
+        die("todas as coleções falharam — veja os erros acima. "
+            f"O {DATA_FILE.name} foi gravado mas está vazio.")
     print("\nResumo:")
     for key, count in data["counts"].items():
         print(f"  {key:16s}: {count}")
