@@ -58,6 +58,7 @@ TOKEN_FILE = ROOT / "whoop_tokens.json"
 DATA_FILE = ROOT / "whoop_data.json"
 
 PAGE_LIMIT = 25          # máximo aceito pela API por página
+MAX_RECORDS = 5000       # trava de segurança por coleção
 REFRESH_MARGIN = 120     # renova o token 2 min antes de expirar
 USER_AGENT = "whoop-dashboard/1.0 (+local script)"
 
@@ -165,6 +166,8 @@ class HttpError(Exception):
 # --------------------------------------------------------------------------- #
 
 def save_tokens(payload: dict) -> dict:
+    if "access_token" not in payload:
+        die(f"resposta do WHOOP sem access_token: {json.dumps(payload)[:300]}")
     now = int(time.time())
     expires_in = int(payload.get("expires_in", 3600))
     record = {
@@ -181,8 +184,12 @@ def save_tokens(payload: dict) -> dict:
         # preserva o anterior para não perder o acesso offline.
         previous = read_tokens()
         record["refresh_token"] = previous.get("refresh_token", "") if previous else ""
-    TOKEN_FILE.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    TOKEN_FILE.chmod(0o600)
+    # Escrita atômica: um refresh invalida o par anterior na hora, então um
+    # arquivo truncado por uma falha no meio da escrita tranca você para fora.
+    temp = TOKEN_FILE.with_suffix(".json.tmp")
+    temp.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    temp.chmod(0o600)
+    os.replace(temp, TOKEN_FILE)
     return record
 
 
@@ -264,6 +271,9 @@ def build_auth_url() -> str:
 # Coleta de dados
 # --------------------------------------------------------------------------- #
 
+API_VERSION_USED: dict[str, str] = {}
+
+
 def api_get(path: str, params: dict | None = None) -> dict:
     """GET autenticado. Tenta v2 e cai para v1 se o endpoint não existir."""
     token = access_token()
@@ -273,7 +283,9 @@ def api_get(path: str, params: dict | None = None) -> dict:
         if params:
             url = f"{url}?{urllib.parse.urlencode(params)}"
         try:
-            return http(url, headers=headers)
+            payload = http(url, headers=headers)
+            API_VERSION_USED[path] = version
+            return payload
         except HttpError as exc:
             if exc.status == 404 and version == "v2":
                 continue  # tenta a v1
@@ -284,11 +296,17 @@ def api_get(path: str, params: dict | None = None) -> dict:
     raise HttpError(404, "endpoint não encontrado em v2 nem v1", path)
 
 
-def collect(path: str, start: str, end: str, label: str) -> list:
-    """Percorre todas as páginas de uma coleção paginada."""
+def collect(path: str, start: str | None, end: str | None, label: str,
+            cap: int = MAX_RECORDS) -> list:
+    """Percorre todas as páginas de uma coleção paginada.
+
+    start/end em None significa 'todo o histórico disponível'.
+    """
     records, next_token, page = [], None, 0
     while True:
-        params = {"limit": PAGE_LIMIT, "start": start, "end": end}
+        params = {"limit": PAGE_LIMIT}
+        if start and end:
+            params["start"], params["end"] = start, end
         if next_token:
             params["nextToken"] = next_token
         payload = api_get(path, params)
@@ -297,20 +315,23 @@ def collect(path: str, start: str, end: str, label: str) -> list:
         page += 1
         print(f"  {label}: {len(records)} registros (página {page})", file=sys.stderr)
         next_token = payload.get("next_token")
-        if not next_token or not batch:
+        if not next_token or not batch or len(records) >= cap:
             break
         time.sleep(0.2)  # respeita o rate limit (100 req/min)
     return records
 
 
-def fetch_all(days: int) -> dict:
+def fetch_all(days: int | None) -> dict:
     end_dt = datetime.now(timezone.utc)
-    start_dt = end_dt - timedelta(days=days)
-    start = start_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    end = end_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-
-    print(f"Coletando de {start_dt.date()} até {end_dt.date()} ({days} dias)…",
-          file=sys.stderr)
+    if days:
+        start_dt = end_dt - timedelta(days=days)
+        start = start_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        end = end_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        print(f"Coletando de {start_dt.date()} até {end_dt.date()} ({days} dias)…",
+              file=sys.stderr)
+    else:
+        start = end = None
+        print("Coletando TODO o histórico disponível…", file=sys.stderr)
 
     data = {
         "fetched_at": end_dt.isoformat(),
@@ -345,6 +366,7 @@ def fetch_all(days: int) -> dict:
             data["errors"][key] = str(exc)
             print(f"  {key}: FALHOU ({exc.status}) {exc.detail[:120]}", file=sys.stderr)
 
+    data["api_version_used"] = dict(API_VERSION_USED)
     data["counts"] = {
         key: len(data.get(key) or [])
         for key in ("cycles", "recovery", "sleep", "workouts")
@@ -593,8 +615,8 @@ def main() -> None:
     sub.add_parser("status", help="estado dos tokens").set_defaults(func=cmd_status)
 
     fetch = sub.add_parser("fetch", help="baixa os dados para whoop_data.json")
-    fetch.add_argument("--days", type=int, default=365,
-                       help="quantos dias de histórico buscar (padrão: 365)")
+    fetch.add_argument("--days", type=int, default=None,
+                       help="limita a janela a N dias (padrão: todo o histórico)")
     fetch.set_defaults(func=cmd_fetch)
 
     digest = sub.add_parser(

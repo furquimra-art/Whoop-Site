@@ -53,8 +53,11 @@ Python 3.9+. Sem dependências externas — o script usa só a biblioteca padrã
 5. **Baixar os dados**
 
    ```bash
-   python3 whoop.py fetch --days 365
+   python3 whoop.py fetch
    ```
+
+   Sem argumentos, baixa **todo o histórico** que a sua conta tiver. Use
+   `--days 90` se quiser limitar a janela.
 
    Gera `whoop_data.json`. O access token é renovado sozinho pelo
    `refresh_token` (escopo `offline`), então os próximos `fetch` não exigem
@@ -68,7 +71,8 @@ Python 3.9+. Sem dependências externas — o script usa só a biblioteca padrã
 | `python3 whoop.py login <code>` | troca o código por access + refresh token |
 | `python3 whoop.py refresh` | força a renovação do access token |
 | `python3 whoop.py status` | mostra validade dos tokens |
-| `python3 whoop.py fetch --days N` | baixa os dados para `whoop_data.json` |
+| `python3 whoop.py digest` | resumo compacto e sem dados pessoais, para análise |
+|  baixa os dados para `whoop_data.json` | baixa os dados para `whoop_data.json` |
 
 ## Escopos solicitados
 
@@ -79,3 +83,13 @@ Python 3.9+. Sem dependências externas — o script usa só a biblioteca padrã
 
 `.env`, `whoop_tokens.json` e `whoop_data.json` estão no `.gitignore` e nunca
 devem ser commitados. O `whoop_tokens.json` é gravado com permissão `600`.
+
+## Pré-requisito que o código não resolve
+
+A API só devolve dados de quem tem **assinatura WHOOP ativa e strap com dados**.
+Sem isso o fluxo inteiro funciona e todos os endpoints voltam vazios.
+
+## Limite de membros
+
+Um app novo atende até 10 membros do WHOOP sem aprovação de produção. Para um
+dashboard pessoal isso é irrelevante: você é um membro.
