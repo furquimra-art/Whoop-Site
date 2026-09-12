@@ -226,6 +226,15 @@ def demo_data() -> dict:
     }
 
 
+def titulo_pedido() -> str | None:
+    """Lê --titulo "Meu nome" da linha de comando."""
+    if "--titulo" in sys.argv:
+        i = sys.argv.index("--titulo")
+        if i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+    return None
+
+
 def main() -> int:
     demo = "--demo" in sys.argv
     if demo:
@@ -266,6 +275,8 @@ def main() -> int:
             .replace("/*__ORB_CSS__*/", orb.get("css", ""))
             .replace("/*__ORB_JS__*/", orb.get("js", ""))
             .replace("<!--__BANNER__-->", BANNER if demo else "")
+            .replace("<title>__TITULO__</title>",
+                     f"<title>{titulo_pedido() or 'Painel WHOOP'}</title>")
             .replace("/*__DATA__*/", json.dumps(payload, ensure_ascii=False)))
 
     out = OUT_FILE.with_name("demo.html") if demo else OUT_FILE
