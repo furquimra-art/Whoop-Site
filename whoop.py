@@ -29,6 +29,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+import pathlib
 from pathlib import Path
 from typing import NoReturn
 
@@ -600,7 +601,33 @@ def build_digest(data: dict) -> dict:
     }
 
 
+def import_weights(path: str) -> int:
+    """Lê um arquivo com uma pesagem por linha: data e peso, em qualquer ordem
+    de separador (vírgula, ponto e vírgula, tabulação ou espaço)."""
+    import re
+    added = 0
+    for raw in pathlib.Path(path).read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        date = re.search(r"(\d{4})[-/](\d{2})[-/](\d{2})", line)
+        kg = re.search(r"(\d{2,3}[.,]\d+|\d{2,3})\s*(?:kg)?\s*$", line)
+        if not (date and kg):
+            print(f"  ignorada: {line[:60]}", file=sys.stderr)
+            continue
+        print("  " + record_weight(
+            None,
+            when=f"{date.group(1)}-{date.group(2)}-{date.group(3)}",
+            kilograms=float(kg.group(1).replace(",", ".")),
+            note="import"))
+        added += 1
+    return added
+
+
 def cmd_weight(args) -> None:
+    if args.import_file:
+        n = import_weights(args.import_file)
+        print(f"{n} pesagem(ns) processada(s).\n")
     if args.kg is not None:
         print(record_weight(None, when=args.date, kilograms=args.kg,
                             note="manual"))
@@ -742,6 +769,9 @@ def main() -> None:
                         help="peso em quilos a registrar")
     weight.add_argument("--date", default=None,
                         help="data do registro no formato AAAA-MM-DD (padrão: hoje)")
+    weight.add_argument("--import", dest="import_file", default=None,
+                        metavar="ARQUIVO",
+                        help="importa um arquivo com 'data peso' por linha")
     weight.set_defaults(func=cmd_weight)
 
     digest = sub.add_parser(
