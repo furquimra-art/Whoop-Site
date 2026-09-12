@@ -61,6 +61,7 @@ ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
 TOKEN_FILE = ROOT / "whoop_tokens.json"
 DATA_FILE = ROOT / "whoop_data.json"
+WEIGHT_FILE = ROOT / "whoop_weight.json"
 
 PAGE_LIMIT = 25          # máximo aceito pela API por página
 MAX_RECORDS = 5000       # trava de segurança por coleção
@@ -381,6 +382,9 @@ def fetch_all(days: int | None) -> dict:
             data["errors"][key] = str(exc)
             print(f"  {key}: FALHOU ({exc.status}) {exc.detail[:120]}", file=sys.stderr)
 
+    print(f"  peso: {record_weight(data.get('body_measurement'))}",
+          file=sys.stderr)
+    data["weight_log"] = read_weight_log()
     data["api_version_used"] = dict(API_VERSION_USED)
     data["counts"] = {
         key: len(data.get(key) or [])
@@ -389,6 +393,59 @@ def fetch_all(days: int | None) -> dict:
     DATA_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
                          encoding="utf-8")
     return data
+
+
+# --------------------------------------------------------------------------- #
+# Histórico de peso
+# --------------------------------------------------------------------------- #
+# A API do WHOOP devolve APENAS o peso atual, um número solto, sem data e sem
+# série. Não existe endpoint de histórico. Então o histórico é construído aqui:
+# cada fetch carimba o valor do dia num arquivo próprio, e daqui em diante você
+# passa a ter a curva que a API não entrega.
+
+def read_weight_log() -> list:
+    if not WEIGHT_FILE.exists():
+        return []
+    try:
+        return json.loads(WEIGHT_FILE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+
+
+def write_weight_log(entries: list) -> None:
+    entries.sort(key=lambda e: e["date"])
+    WEIGHT_FILE.write_text(json.dumps(entries, indent=2) + "\n", encoding="utf-8")
+
+
+def record_weight(body: dict | None, when: str | None = None,
+                  kilograms: float | None = None, note: str = "api") -> str:
+    """Carimba um peso no log. Devolve uma frase sobre o que aconteceu."""
+    date = when or datetime.now().astimezone().date().isoformat()
+    weight = kilograms if kilograms is not None else (body or {}).get(
+        "weight_kilogram")
+    if weight is None:
+        return "sem peso para registrar"
+
+    entries = read_weight_log()
+    same_day = next((e for e in entries if e["date"] == date), None)
+    if same_day:
+        if abs(same_day["weight_kilogram"] - weight) < 0.001:
+            return f"peso de {date} já registrado ({weight} kg)"
+        same_day.update({"weight_kilogram": weight, "source": note})
+        write_weight_log(entries)
+        return f"peso de {date} atualizado para {weight} kg"
+
+    entries.append({"date": date, "weight_kilogram": weight,
+                    "height_meter": (body or {}).get("height_meter"),
+                    "source": note})
+    write_weight_log(entries)
+    previous = [e for e in entries if e["date"] < date]
+    if previous:
+        delta = weight - previous[-1]["weight_kilogram"]
+        arrow = "+" if delta >= 0 else "−"
+        return (f"peso de {date}: {weight} kg "
+                f"({arrow}{abs(delta):.1f} kg desde {previous[-1]['date']})")
+    return f"peso de {date}: {weight} kg — primeiro ponto do histórico"
 
 
 # --------------------------------------------------------------------------- #
@@ -531,6 +588,7 @@ def build_digest(data: dict) -> dict:
         "counts": data.get("counts"),
         "errors": data.get("errors"),
         "profile_present": bool(profile),
+        "weight_log": read_weight_log(),
         "body_measurement": {
             k: v for k, v in body.items() if k not in PII_KEYS
         },
@@ -540,6 +598,31 @@ def build_digest(data: dict) -> dict:
         },
         "daily": [by_day[d] for d in sorted(by_day)],
     }
+
+
+def cmd_weight(args) -> None:
+    if args.kg is not None:
+        print(record_weight(None, when=args.date, kilograms=args.kg,
+                            note="manual"))
+    entries = read_weight_log()
+    if not entries:
+        print("Nenhum peso registrado ainda. Rode 'python3 whoop.py fetch' "
+              "ou use --kg para lançar um valor à mão.")
+        return
+    print(f"\n{len(entries)} registro(s) em {WEIGHT_FILE.name}:")
+    previous = None
+    for entry in entries:
+        delta = ""
+        if previous is not None:
+            diff = entry["weight_kilogram"] - previous
+            delta = f"  ({'+' if diff >= 0 else '−'}{abs(diff):.1f} kg)"
+        print(f"  {entry['date']}  {entry['weight_kilogram']:.1f} kg"
+              f"{delta}  [{entry.get('source', '?')}]")
+        previous = entry["weight_kilogram"]
+    if len(entries) > 1:
+        total = entries[-1]["weight_kilogram"] - entries[0]["weight_kilogram"]
+        print(f"\nVariação total: {'+' if total >= 0 else '−'}{abs(total):.1f} kg "
+              f"em {len(entries)} pontos.")
 
 
 def cmd_digest(args) -> None:
@@ -652,6 +735,14 @@ def main() -> None:
     fetch.add_argument("--days", type=int, default=None,
                        help="limita a janela a N dias (padrão: todo o histórico)")
     fetch.set_defaults(func=cmd_fetch)
+
+    weight = sub.add_parser(
+        "weight", help="mostra o histórico de peso; --kg lança um valor à mão")
+    weight.add_argument("--kg", type=float, default=None,
+                        help="peso em quilos a registrar")
+    weight.add_argument("--date", default=None,
+                        help="data do registro no formato AAAA-MM-DD (padrão: hoje)")
+    weight.set_defaults(func=cmd_weight)
 
     digest = sub.add_parser(
         "digest", help="resumo compacto de whoop_data.json, sem dados pessoais")

@@ -3,6 +3,7 @@
 whoop_tokens.json
 whoop_data.json
 whoop_digest.json
+whoop_weight.json
 
 # O dashboard gerado contém os seus dados de saúde — nunca versionar
 dashboard/index.html

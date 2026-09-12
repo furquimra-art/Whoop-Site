@@ -99,6 +99,7 @@ ele, num diretório temporário. Não toca na sua conta nem nos seus arquivos.
 | `python3 whoop.py refresh` | força a renovação do access token |
 | `python3 whoop.py status` | mostra validade dos tokens |
 | `python3 whoop.py digest` | resumo compacto e sem dados pessoais, para análise |
+| `python3 whoop.py weight` | histórico de peso; `--kg 78.4 --date 2026-09-01` lança um valor |
 |  baixa os dados para `whoop_data.json` | baixa os dados para `whoop_data.json` |
 
 ## Escopos solicitados
@@ -120,3 +121,14 @@ Sem isso o fluxo inteiro funciona e todos os endpoints voltam vazios.
 
 Um app novo atende até 10 membros do WHOOP sem aprovação de produção. Para um
 dashboard pessoal isso é irrelevante: você é um membro.
+
+## Sobre o peso
+
+A API devolve apenas o peso **atual**, sem data e sem série. Não existe endpoint
+de histórico. Por isso cada `fetch` carimba o valor do dia em
+`whoop_weight.json`, construindo a curva que a API não entrega. Para lançar
+pesos antigos que você tenha anotado:
+
+```bash
+python3 whoop.py weight --kg 81.2 --date 2026-06-01
+```
