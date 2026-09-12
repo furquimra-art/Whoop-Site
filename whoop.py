@@ -569,13 +569,27 @@ def cmd_url(_args) -> None:
         "\n2. Aprove o acesso.\n"
         "3. O navegador vai tentar abrir https://localhost:8080/callback?code=...\n"
         "   Vai dar erro de conexão — isso é esperado e não é problema.\n"
-        "4. Copie o valor de code= da barra de endereço e rode em MENOS DE 1 MINUTO:\n"
-        "      python3 whoop.py login <code>\n"
+        "4. Copie a URL INTEIRA da barra de endereço e rode em MENOS DE 1 MINUTO:\n"
+        "      python3 whoop.py login\n"
+        "   Sem nada depois de 'login'. Ele vai pedir a URL e aí você cola.\n"
+        "   Assim o terminal não se confunde com os caracteres & e ? da URL.\n"
     )
 
 
 def cmd_login(args) -> None:
-    record = exchange_code(args.code)
+    code = args.code
+    if not code:
+        # Pedir aqui evita todo o problema de aspas do shell: um & ou ? na URL
+        # não tem significado nenhum para o input(), só para o terminal.
+        print("Cole o código de autorização OU a URL inteira do callback "
+              "e dê Enter.")
+        try:
+            code = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            die("cancelado.")
+        if not code:
+            die("nada foi colado.")
+    record = exchange_code(code)
     expires = datetime.fromtimestamp(record["expires_at"], timezone.utc)
     print(f"Tokens salvos em {TOKEN_FILE.name}")
     print(f"  scope        : {record['scope']}")
@@ -627,7 +641,8 @@ def main() -> None:
     sub.add_parser("url", help="imprime a URL de autorização").set_defaults(func=cmd_url)
 
     login = sub.add_parser("login", help="troca o código de autorização por tokens")
-    login.add_argument("code", help="o valor de code= da URL de callback")
+    login.add_argument("code", nargs="?", default=None,
+                       help="o code= da URL de callback; sem isso, o script pergunta")
     login.set_defaults(func=cmd_login)
 
     sub.add_parser("refresh", help="renova o access token").set_defaults(func=cmd_refresh)

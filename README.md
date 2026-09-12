@@ -45,8 +45,11 @@ Python 3.9+. Sem dependências externas — o script usa só a biblioteca padrã
 4. **Trocar o código por tokens (em menos de 1 minuto)**
 
    ```bash
-   python3 whoop.py login <code>
+   python3 whoop.py login
    ```
+
+   Sem nada depois de `login`. O script pede a URL e você cola. Isso evita que
+   o terminal se confunda com os caracteres `&` e `?` que a URL contém.
 
    O código de autorização expira muito rápido. Se der erro, volte ao passo 2.
 
@@ -92,7 +95,7 @@ ele, num diretório temporário. Não toca na sua conta nem nos seus arquivos.
 | Comando | O que faz |
 |---|---|
 | `python3 whoop.py url` | imprime a URL de autorização |
-| `python3 whoop.py login <code>` | troca o código por access + refresh token |
+| `python3 whoop.py login` | pede a URL de callback e troca por access + refresh token |
 | `python3 whoop.py refresh` | força a renovação do access token |
 | `python3 whoop.py status` | mostra validade dos tokens |
 | `python3 whoop.py digest` | resumo compacto e sem dados pessoais, para análise |
