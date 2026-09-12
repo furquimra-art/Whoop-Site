@@ -178,7 +178,8 @@ const CONFIG = [
   {key:"baselineDays",label:"Janela da sua linha de base", min:7, max:90, step:1, value:30, unit:" d"},
   {key:"pushAt", label:"Índice a partir do qual treinar forte", min:50, max:90, step:1, value:70, unit:""},
   {key:"holdAt", label:"Índice a partir do qual manter o plano", min:30, max:70, step:1, value:50, unit:""},
-  {key:"window", label:"Dias visíveis nos gráficos", min:14, max:180, step:7, value:60, unit:" d"},
+  {key:"window", label:"Dias visíveis nos gráficos", min:14, max:400, step:7, value:120, unit:" d"},
+  {key:"mediasMes", label:"Mostrar a média de cada mês", tipo:"bool", value:1},
   {key:"metaPeso", label:"Peso que você quer atingir", min:60, max:95, step:0.5, value:75, unit:" kg"},
   {key:"tendDias", label:"Janela para calcular o ritmo de perda", min:30, max:365, step:15, value:90, unit:" d"},
 ];
@@ -373,6 +374,73 @@ function showTip(html, evt) {
 }
 const hideTip = () => TIP.style.opacity = 0;
 
+/* ---------- médias mensais ---------- *
+ * Um segmento horizontal por mês, na altura da média daquele mês, com o valor
+ * em cima e a variação contra o mês anterior embaixo. A variação é calculada
+ * sobre a série inteira, não só sobre o trecho visível, senão o primeiro mês
+ * da tela ficaria sem comparação.
+ */
+function mediaPorMes(rows, field) {
+  const acc = {};
+  for (const r of rows) {
+    const v = num(r[field]);
+    if (v === null) continue;
+    const m = r.date.slice(0, 7);
+    (acc[m] = acc[m] || []).push(v);
+  }
+  const saida = {};
+  for (const m of Object.keys(acc))
+    saida[m] = acc[m].reduce((a, b) => a + b, 0) / acc[m].length;
+  return saida;
+}
+
+/* direcao: "maior" = subir é bom, "menor" = descer é bom, "neutro" = sem cor */
+function mediasMensaisSVG(rows, field, X, Y, decimais, unidade, direcao) {
+  if (!cfg.mediasMes) return "";
+  const todasAsMedias = mediaPorMes(S, field);      // série completa
+  const meses = [];
+  rows.forEach((r, i) => {
+    const m = r.date.slice(0, 7);
+    if (num(r[field]) === null) return;
+    const ultimo = meses[meses.length - 1];
+    if (ultimo && ultimo.mes === m) ultimo.fim = i;
+    else meses.push({mes: m, ini: i, fim: i});
+  });
+
+  let svg = "";
+  for (const bloco of meses) {
+    const media = todasAsMedias[bloco.mes];
+    if (media === undefined) continue;
+    const x1 = X(bloco.ini), x2 = X(bloco.fim), y = Y(media);
+    const largura = x2 - x1;
+    svg += `<line x1="${x1.toFixed(1)}" x2="${x2.toFixed(1)}"
+      y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--ink)"
+      stroke-width="2.5" stroke-linecap="round"/>`;
+    if (largura < 42) continue;                      // sem espaço para rótulo
+    const meio = (x1 + x2) / 2;
+    svg += `<text x="${meio.toFixed(1)}" y="${(y - 7).toFixed(1)}"
+      text-anchor="middle" fill="var(--ink)" style="font-size:13px;font-weight:700;
+      font-family:inherit;font-variant-numeric:tabular-nums">${media.toFixed(decimais)}${unidade}</text>`;
+
+    // variação contra o mês anterior
+    const [ano, mm] = bloco.mes.split("-").map(Number);
+    const anterior = new Date(Date.UTC(ano, mm - 2, 1)).toISOString().slice(0, 7);
+    const antes = todasAsMedias[anterior];
+    if (antes === undefined || largura < 52) continue;
+    const dif = media - antes;
+    let cor = "var(--ink-3)";
+    if (Math.abs(dif) >= 0.05 && direcao && direcao !== "neutro") {
+      const bom = direcao === "maior" ? dif > 0 : dif < 0;
+      cor = bom ? "var(--good)" : "var(--serious)";
+    }
+    svg += `<text x="${meio.toFixed(1)}" y="${(y + 17).toFixed(1)}"
+      text-anchor="middle" fill="${cor}" style="font-size:12px;font-weight:650;
+      font-family:inherit;font-variant-numeric:tabular-nums">${
+      dif >= 0 ? "+" : "−"}${Math.abs(dif).toFixed(decimais)}${unidade}</text>`;
+  }
+  return svg;
+}
+
 function chartFrame(title, note, legend, inner) {
   return `<div class="card">
     <div class="chart-head"><div class="chart-title">${title}</div>
@@ -407,10 +475,15 @@ function lineChart(opts) {
       d += (open ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1) + " ";
       open = true;
     });
-    svg += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2"
-      stroke-linecap="round" stroke-linejoin="round"
-      ${s.dashed?'stroke-dasharray="5 4" opacity=".75"':""}/>`;
+    const recua = cfg.mediasMes && series.length === 1;
+    svg += `<path d="${d}" fill="none" stroke="${s.color}"
+      stroke-width="${recua ? 1.2 : 2}" stroke-linecap="round" stroke-linejoin="round"
+      ${s.dashed ? 'stroke-dasharray="5 4" opacity=".75"'
+                 : (recua ? 'opacity=".5"' : "")}/>`;
   }
+  svg += mediasMensaisSVG(rows, series[0].field, X, Y,
+                          opts.decimals || 0, opts.unit || "",
+                          opts.direcao || "neutro");
   const step = Math.max(1, Math.ceil(rows.length / 4));
   rows.forEach((r,i) => { if (i % step === 0 || i === rows.length-1)
     svg += `<text class="axis-text" x="${X(i)}" y="${H-8}" text-anchor="middle">${diaMes(r.date)}</text>`; });
@@ -425,9 +498,12 @@ function lineChart(opts) {
       data-tip="${esc(`<b>${dataBRlonga(r.date)}</b>${body}`)}"/>`;
   });
   svg += `</svg>`;
-  const legend = series.length > 1
-    ? `<div class="legend">${series.map(s=>`<span><i style="background:${s.color}"></i>${s.label}</span>`).join("")}</div>`
-    : "";
+  const itens = series.map(s =>
+    `<span><i style="background:${s.color}"></i>${s.label}</span>`);
+  if (cfg.mediasMes)
+    itens.push(`<span><i style="background:var(--ink)"></i>média mensal de ${
+      series[0].label}</span>`);
+  const legend = itens.length > 1 ? `<div class="legend">${itens.join("")}</div>` : "";
   return chartFrame(opts.title, opts.note, legend, svg);
 }
 
@@ -449,10 +525,12 @@ function recoveryChart() {
     const h = Math.max(2, H - B - Y(v));
     svg += `<rect x="${(L + i*bw + 1).toFixed(1)}" y="${Y(v).toFixed(1)}"
       width="${Math.max(1.5, bw-2).toFixed(1)}" height="${h.toFixed(1)}" rx="3"
-      fill="${color}" data-tip="${esc(`<b>${dataBRlonga(r.date)}</b><div>recovery_score: <b>${v}%</b> (${band})</div>` +
+      fill="${color}" opacity="${cfg.mediasMes ? .45 : 1}" data-tip="${esc(`<b>${dataBRlonga(r.date)}</b><div>recovery_score: <b>${v}%</b> (${band})</div>` +
         (num(r.hrv_rmssd_milli)!==null?`<div>HRV: <b>${fmt(r.hrv_rmssd_milli,1)} ms</b></div>`:"") +
         (num(r.resting_heart_rate)!==null?`<div>FC repouso: <b>${r.resting_heart_rate} bpm</b></div>`:""))}"/>`;
   });
+  svg += mediasMensaisSVG(rows, "recovery_score",
+    i => L + i * bw + bw / 2, Y, 0, "%", "maior");
   const step = Math.max(1, Math.ceil(rows.length / 4));
   rows.forEach((r,i) => { if (i % step === 0 || i === rows.length-1)
     svg += `<text class="axis-text" x="${L+i*bw+bw/2}" y="${H-8}" text-anchor="middle">${diaMes(r.date)}</text>`; });
@@ -460,34 +538,36 @@ function recoveryChart() {
   const legend = `<div class="legend">
     <span><i style="background:var(--good)"></i>verde, 67% ou mais</span>
     <span><i style="background:var(--warning)"></i>amarelo, 34 a 66%</span>
-    <span><i style="background:var(--critical)"></i>vermelho, abaixo de 34%</span></div>`;
+    <span><i style="background:var(--critical)"></i>vermelho, abaixo de 34%</span>` +
+    (cfg.mediasMes ? `<span><i style="background:var(--ink)"></i>média do mês</span>` : "") +
+    `</div>`;
   return chartFrame("Recovery diário", "faixas do próprio WHOOP", legend, svg);
 }
 
 function renderCharts() {
   const out = [recoveryChart()];
-  out.push(lineChart({title:"Strain do dia", field:"strain", decimals:1, zero:true,
+  out.push(lineChart({title:"Strain do dia", field:"strain", decimals:1, zero:true, direcao:"neutro",
     note:`escala 0 a 21`, series:[{field:"strain", label:"strain", color:"var(--s1)"}]}));
-  out.push(lineChart({title:"Sono: dormido x necessário", decimals:1, unit:" h",
+  out.push(lineChart({title:"Sono: dormido x necessário", decimals:1, unit:" h", direcao:"maior",
     note:"o necessário vem do WHOOP", series:[
       {field:"asleep_hours", label:"dormido", color:"var(--s4)"},
       {field:"sleep_needed_hours", label:"necessário", color:"var(--ink-2)", dashed:true}]}));
-  out.push(lineChart({title:"HRV em repouso", field:"hrv_rmssd_milli", decimals:0,
+  out.push(lineChart({title:"HRV em repouso", field:"hrv_rmssd_milli", decimals:0, direcao:"maior",
     unit:" ms", note:"hrv_rmssd_milli",
     series:[{field:"hrv_rmssd_milli", label:"HRV", color:"var(--s2)"}]}));
-  out.push(lineChart({title:"Frequência cardíaca de repouso", decimals:0, unit:" bpm",
+  out.push(lineChart({title:"Frequência cardíaca de repouso", decimals:0, unit:" bpm", direcao:"menor",
     note:"resting_heart_rate",
     series:[{field:"resting_heart_rate", label:"FC repouso", color:"var(--s3)"}]}));
   if (has(S, "respiratory_rate"))
-    out.push(lineChart({title:"Frequência respiratória no sono", decimals:1,
+    out.push(lineChart({title:"Frequência respiratória no sono", decimals:1, direcao:"neutro",
       unit:" rpm", note:"respiratory_rate",
       series:[{field:"respiratory_rate", label:"resp.", color:"var(--s2)"}]}));
   if (has(S, "skin_temp_celsius"))
-    out.push(lineChart({title:"Temperatura da pele", decimals:1, unit:" °C",
+    out.push(lineChart({title:"Temperatura da pele", decimals:1, unit:" °C", direcao:"neutro",
       note:"skin_temp_celsius",
       series:[{field:"skin_temp_celsius", label:"pele", color:"var(--s3)"}]}));
   if (has(S, "spo2_percentage"))
-    out.push(lineChart({title:"Saturação de oxigênio", decimals:1, unit:" %",
+    out.push(lineChart({title:"Saturação de oxigênio", decimals:1, unit:" %", direcao:"maior",
       note:"spo2_percentage",
       series:[{field:"spo2_percentage", label:"SpO₂", color:"var(--s1)"}]}));
   document.getElementById("charts").innerHTML = out.filter(Boolean).join("");
@@ -804,15 +884,25 @@ function renderProvenance() {
  * Controles
  * ========================================================================== */
 function renderKnobs() {
-  document.getElementById("knobs").innerHTML = CONFIG.map(c => `
-    <div class="knob">
+  document.getElementById("knobs").innerHTML = CONFIG.map(c => c.tipo === "bool"
+    ? `<div class="knob"><label style="display:flex;gap:9px;align-items:center;
+         cursor:pointer;margin:0">
+         <input type="checkbox" id="k-${c.key}" ${c.value ? "checked" : ""}
+           style="width:16px;height:16px;accent-color:var(--s1)">
+         ${c.label}</label></div>`
+    : `<div class="knob">
       <label for="k-${c.key}">${c.label}:
         <span class="val" id="v-${c.key}">${c.value}${c.unit}</span></label>
       <input type="range" id="k-${c.key}" min="${c.min}" max="${c.max}"
         step="${c.step}" value="${c.value}">
     </div>`).join("");
   CONFIG.forEach(c => {
-    document.getElementById("k-"+c.key).addEventListener("input", e => {
+    const el = document.getElementById("k-" + c.key);
+    if (c.tipo === "bool") {
+      el.addEventListener("change", e => { cfg[c.key] = e.target.checked ? 1 : 0; render(); });
+      return;
+    }
+    el.addEventListener("input", e => {
       cfg[c.key] = parseFloat(e.target.value);
       document.getElementById("v-"+c.key).textContent =
         (c.step < 1 ? cfg[c.key].toFixed(2) : cfg[c.key]) + c.unit;
