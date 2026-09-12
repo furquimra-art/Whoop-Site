@@ -208,6 +208,23 @@ const tail = (field, days, upTo) => {
           .map(r => num(r[field])).filter(v => v !== null);
 };
 const fmt = (v, d=0) => v === null || v === undefined ? "—" : v.toFixed(d);
+
+/* Datas no padrão brasileiro. A base continua AAAA-MM-DD para ordenar e
+   calcular; a conversão acontece só na hora de mostrar. */
+const dataBR = iso => {
+  if (!iso) return "—";
+  const [a, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${a.slice(2)}`;
+};
+const dataBRlonga = iso => {
+  if (!iso) return "—";
+  const [a, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${a}`;
+};
+const diaMes = iso => iso.slice(8, 10) + "/" + iso.slice(5, 7);
+const isoDe = dt => dt.getFullYear() + "-" +
+  String(dt.getMonth() + 1).padStart(2, "0") + "-" +
+  String(dt.getDate()).padStart(2, "0");
 const esc = s => String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 
 /* ========================================================================== *
@@ -288,7 +305,7 @@ function renderVerdict(r) {
   if (r.sleep) bits.push(`sono ${fmt(r.sleep.value)}% do necessário`);
   if (r.balance.score !== null) bits.push(`carga aguda/crônica ${fmt(r.balance.ratio,2)}`);
   const stale = r.recovery && r.recovery.back > 0
-    ? ` <span class="tag warn">dado mais recente é de ${r.recovery.date}</span>` : "";
+    ? ` <span class="tag warn">dado mais recente é de ${dataBR(r.recovery.date)}</span>` : "";
   el.innerHTML = `<div class="verdict">
     <div class="label">Decisão de hoje</div>
     <div class="call"><span class="dot" style="background:rgb(${rr},${gg},${bb})"></span>${call}</div>
@@ -396,7 +413,7 @@ function lineChart(opts) {
   }
   const step = Math.max(1, Math.ceil(rows.length / 4));
   rows.forEach((r,i) => { if (i % step === 0 || i === rows.length-1)
-    svg += `<text class="axis-text" x="${X(i)}" y="${H-8}" text-anchor="middle">${r.date.slice(5)}</text>`; });
+    svg += `<text class="axis-text" x="${X(i)}" y="${H-8}" text-anchor="middle">${diaMes(r.date)}</text>`; });
   // camada de hover: uma faixa por dia
   rows.forEach((r,i) => {
     const body = series.map(s => num(r[s.field]) === null ? "" :
@@ -405,7 +422,7 @@ function lineChart(opts) {
     if (!body.trim()) return;
     svg += `<rect x="${X(i)-(W-L-R)/rows.length/2}" y="${T}"
       width="${(W-L-R)/rows.length}" height="${H-T-B}" fill="transparent"
-      data-tip="${esc(`<b>${r.date}</b>${body}`)}"/>`;
+      data-tip="${esc(`<b>${dataBRlonga(r.date)}</b>${body}`)}"/>`;
   });
   svg += `</svg>`;
   const legend = series.length > 1
@@ -432,13 +449,13 @@ function recoveryChart() {
     const h = Math.max(2, H - B - Y(v));
     svg += `<rect x="${(L + i*bw + 1).toFixed(1)}" y="${Y(v).toFixed(1)}"
       width="${Math.max(1.5, bw-2).toFixed(1)}" height="${h.toFixed(1)}" rx="3"
-      fill="${color}" data-tip="${esc(`<b>${r.date}</b><div>recovery_score: <b>${v}%</b> (${band})</div>` +
+      fill="${color}" data-tip="${esc(`<b>${dataBRlonga(r.date)}</b><div>recovery_score: <b>${v}%</b> (${band})</div>` +
         (num(r.hrv_rmssd_milli)!==null?`<div>HRV: <b>${fmt(r.hrv_rmssd_milli,1)} ms</b></div>`:"") +
         (num(r.resting_heart_rate)!==null?`<div>FC repouso: <b>${r.resting_heart_rate} bpm</b></div>`:""))}"/>`;
   });
   const step = Math.max(1, Math.ceil(rows.length / 4));
   rows.forEach((r,i) => { if (i % step === 0 || i === rows.length-1)
-    svg += `<text class="axis-text" x="${L+i*bw+bw/2}" y="${H-8}" text-anchor="middle">${r.date.slice(5)}</text>`; });
+    svg += `<text class="axis-text" x="${L+i*bw+bw/2}" y="${H-8}" text-anchor="middle">${diaMes(r.date)}</text>`; });
   svg += `</svg>`;
   const legend = `<div class="legend">
     <span><i style="background:var(--good)"></i>verde, 67% ou mais</span>
@@ -532,9 +549,9 @@ function renderPeso() {
 
   const tiles = [];
   tiles.push(tile("Peso atual", fmt(atual.kg, 1) + " kg",
-    `medido em ${atual.date}`));
+    `medido em ${dataBR(atual.date)}`));
   tiles.push(tile("Desde o pico", fmt(atual.kg - pico.kg, 1) + " kg",
-    `${((atual.kg - pico.kg) / pico.kg * 100).toFixed(1)}% desde ${pico.date}`,
+    `${((atual.kg - pico.kg) / pico.kg * 100).toFixed(1)}% desde ${dataBR(pico.date)}`,
     atual.kg < pico.kg ? "up" : "down"));
   tiles.push(tile("Falta para a meta", fmt(Math.abs(falta), 1) + " kg",
     `meta de ${fmt(cfg.metaPeso, 1)} kg`));
@@ -545,7 +562,7 @@ function renderPeso() {
     if (ritmo.porDia < -0.0001 && falta > 0) {
       const dias = Math.round(falta / -ritmo.porDia);
       const quando = new Date(new Date(atual.date).getTime() + dias * 86400000);
-      tiles.push(tile("Projeção da meta", quando.toISOString().slice(0, 10),
+      tiles.push(tile("Projeção da meta", dataBR(isoDe(quando)),
         `${dias} dias mantendo o ritmo`));
     }
   }
@@ -567,7 +584,7 @@ function renderPeso() {
   const n2 = v => v.toFixed(1);
 
   let svg = `<svg viewBox="0 0 ${W} ${H}" role="img"
-    aria-label="Peso corporal ao longo do tempo, de ${primeiro.date} a ${atual.date}">
+    aria-label="Peso corporal ao longo do tempo, de ${dataBRlonga(primeiro.date)} a ${dataBRlonga(atual.date)}">
     <defs>
       <linearGradient id="gPeso" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="var(--s2)" stop-opacity=".34"/>
@@ -645,7 +662,7 @@ function renderPeso() {
   PESO.forEach((p, i) => {
     svg += `<rect x="${(X(p.date)-larg/2).toFixed(1)}" y="${T}" width="${larg.toFixed(1)}"
       height="${(H-T-B).toFixed(1)}" fill="transparent" data-tip="${esc(
-        `<b>${p.date}</b><div>pesagem: <b>${n2(p.kg)} kg</b></div>` +
+        `<b>${dataBRlonga(p.date)}</b><div>pesagem: <b>${n2(p.kg)} kg</b></div>` +
         `<div>média de 7: <b>${n2(suave[i])} kg</b></div>`)}"/>`;
   });
   svg += `</svg>`;
@@ -656,7 +673,7 @@ function renderPeso() {
     <span><i style="background:var(--good)"></i>meta</span></div>`;
   document.getElementById("peso-chart").innerHTML = chartFrame(
     "Peso ao longo do tempo",
-    `${PESO.length} pesagens · ${primeiro.date} a ${atual.date}`,
+    `${PESO.length} pesagens · ${dataBR(primeiro.date)} a ${dataBR(atual.date)}`,
     legenda, svg);
   document.querySelectorAll("#peso-chart [data-tip]").forEach(el => {
     el.addEventListener("mousemove", e => showTip(el.dataset.tip, e));
@@ -731,8 +748,10 @@ function renderQuality() {
   const bodyBits = Object.entries(body).filter(([,v]) => v !== null && v !== undefined)
     .map(([k,v]) => `${k}: <b>${v}</b>`).join(" · ");
   document.getElementById("quality").innerHTML = `
-    <p class="small muted"><b>${total}</b> dias no arquivo, de <b>${first}</b> a
-      <b>${latest}</b>. Coletado em ${esc((DATA.fetched_at||"").slice(0,16).replace("T"," "))}.</p>
+    <p class="small muted"><b>${total}</b> dias no arquivo, de
+      <b>${dataBRlonga(first)}</b> a <b>${dataBRlonga(latest)}</b>.
+      Coletado em ${dataBRlonga(DATA.fetched_at)} às
+      ${esc((DATA.fetched_at||"").slice(11,16))}.</p>
     ${bodyBits ? `<p class="small muted">Medidas corporais — ${bodyBits}</p>` : ""}
     ${errs}
     <div class="scroll"><table><thead><tr><th>campo</th><th>dias preenchidos</th>
@@ -748,6 +767,7 @@ function renderTable() {
   ].filter(([f]) => f === "date" || has(S, f));
   const rows = S.slice(-30).reverse().map(r => `<tr>${cols.map(([f]) => {
     const v = r[f];
+    if (f === "date") return `<td>${dataBR(v)}</td>`;
     return `<td>${v === null || v === undefined ? "—" :
       (typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(1)) : v)}</td>`;
   }).join("")}</tr>`).join("");
@@ -775,7 +795,8 @@ function renderProvenance() {
       <li>os limites que separam treinar forte, manter e recuar;</li>
       <li>a linha de base de comparação e o corte de 0,35 desvio padrão.</li>
     </ul>
-    <p>Gerado em ${esc(DATA.generated_at)} a partir do seu whoop_data.json.
+    <p>Gerado em ${dataBRlonga(DATA.generated_at)} às
+      ${esc((DATA.generated_at||"").slice(11,16))}, a partir do seu whoop_data.json.
       Nenhum dado sai desta página.</p>`;
 }
 
