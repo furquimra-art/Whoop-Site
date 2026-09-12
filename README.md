@@ -122,6 +122,34 @@ Sem isso o fluxo inteiro funciona e todos os endpoints voltam vazios.
 Um app novo atende até 10 membros do WHOOP sem aprovação de produção. Para um
 dashboard pessoal isso é irrelevante: você é um membro.
 
+## Atualização automática
+
+`./atualizar.sh` faz tudo de uma vez: baixa os dados novos, carimba o peso do
+dia no histórico e regera o dashboard. Não abre navegador, porque o token se
+renova sozinho.
+
+Para rodar todo dia sozinho no macOS, abra o editor de tarefas agendadas:
+
+```bash
+crontab -e
+```
+
+E acrescente esta linha, trocando o caminho se a pasta não estiver na Mesa:
+
+```
+0 9 * * * /bin/bash ~/Desktop/whoop-dashboard/atualizar.sh
+```
+
+Isso roda às 9h da manhã, todos os dias. A saída vai para `atualizar.log`
+dentro da pasta do projeto. Para conferir se funcionou:
+
+```bash
+tail -25 ~/Desktop/whoop-dashboard/atualizar.log
+```
+
+Na primeira vez o macOS pode pedir permissão de acesso ao disco para o `cron`,
+em Ajustes do Sistema, Privacidade e Segurança, Acesso Total ao Disco.
+
 ## Sobre o peso
 
 A API devolve apenas o peso **atual**, sem data e sem série. Não existe endpoint
