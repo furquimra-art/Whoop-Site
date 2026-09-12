@@ -130,6 +130,12 @@ ul{margin:8px 0;padding-left:20px} li{margin:5px 0}
     </details>
   </section>
 
+  <section id="peso-secao" hidden>
+    <h2>Peso</h2>
+    <div class="rail" id="peso-rail" style="margin-bottom:16px"></div>
+    <div class="charts" id="peso-chart"></div>
+  </section>
+
   <section>
     <h2>Tendências</h2>
     <div class="charts" id="charts"></div>
@@ -169,6 +175,8 @@ const CONFIG = [
   {key:"pushAt", label:"Índice a partir do qual treinar forte", min:50, max:90, step:1, value:70, unit:""},
   {key:"holdAt", label:"Índice a partir do qual manter o plano", min:30, max:70, step:1, value:50, unit:""},
   {key:"window", label:"Dias visíveis nos gráficos", min:14, max:180, step:7, value:60, unit:" d"},
+  {key:"metaPeso", label:"Peso que você quer atingir", min:60, max:95, step:0.5, value:75, unit:" kg"},
+  {key:"tendDias", label:"Janela para calcular o ritmo de perda", min:30, max:365, step:15, value:90, unit:" d"},
 ];
 const cfg = {};
 CONFIG.forEach(c => cfg[c.key] = c.value);
@@ -470,6 +478,117 @@ function renderCharts() {
   });
 }
 
+/* ---------- peso ---------- */
+const PESO = (DATA.weight_log || [])
+  .filter(e => typeof e.weight_kilogram === "number")
+  .map(e => ({date: e.date, kg: e.weight_kilogram}))
+  .sort((a, b) => a.date < b.date ? -1 : 1);
+
+const diasEntre = (a, b) => (new Date(b) - new Date(a)) / 86400000;
+
+function ritmoPeso() {
+  // Regressão linear simples do peso contra os dias, na janela escolhida.
+  const fim = PESO[PESO.length - 1];
+  const pts = PESO.filter(p => diasEntre(p.date, fim.date) <= cfg.tendDias)
+                  .map(p => [ -diasEntre(p.date, fim.date), p.kg ]);
+  if (pts.length < 3) return null;
+  const n = pts.length;
+  const mx = pts.reduce((a, p) => a + p[0], 0) / n;
+  const my = pts.reduce((a, p) => a + p[1], 0) / n;
+  const den = pts.reduce((a, p) => a + (p[0] - mx) ** 2, 0);
+  if (!den) return null;
+  const b = pts.reduce((a, p) => a + (p[0] - mx) * (p[1] - my), 0) / den;
+  const a0 = my - b * mx;
+  return {porDia: b, porMes: b * 30, n, intercepto: a0, hoje: fim};
+}
+
+function renderPeso() {
+  if (PESO.length < 2) return;
+  document.getElementById("peso-secao").hidden = false;
+  const atual = PESO[PESO.length - 1];
+  const primeiro = PESO[0];
+  const ritmo = ritmoPeso();
+  const falta = atual.kg - cfg.metaPeso;
+
+  const tiles = [];
+  tiles.push(tile("Peso atual", fmt(atual.kg, 1) + " kg",
+    `medido em ${atual.date}`));
+  tiles.push(tile("Desde o início", fmt(atual.kg - primeiro.kg, 1) + " kg",
+    `desde ${primeiro.date}`, atual.kg < primeiro.kg ? "up" : "down"));
+  tiles.push(tile("Falta para a meta", fmt(Math.abs(falta), 1) + " kg",
+    `meta de ${fmt(cfg.metaPeso, 1)} kg`));
+  if (ritmo) {
+    tiles.push(tile("Ritmo atual", fmt(ritmo.porMes, 2) + " kg/mês",
+      `reta sobre ${ritmo.n} pesagens em ${cfg.tendDias} d`,
+      ritmo.porMes < 0 ? "up" : ""));
+    if (ritmo.porDia < -0.0001 && falta > 0) {
+      const dias = Math.round(falta / -ritmo.porDia);
+      const quando = new Date(new Date(atual.date).getTime() + dias * 86400000);
+      tiles.push(tile("Projeção da meta", quando.toISOString().slice(0, 10),
+        `${dias} dias no ritmo atual`));
+    }
+  }
+  document.getElementById("peso-rail").innerHTML = tiles.join("");
+
+  // gráfico
+  const W = 520, H = 200, L = 44, R = 10, T = 12, B = 26;
+  const vals = PESO.map(p => p.kg).concat([cfg.metaPeso]);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = (hi - lo) * 0.1 || 1; lo -= pad; hi += pad;
+  const t0 = new Date(PESO[0].date).getTime();
+  const t1 = new Date(atual.date).getTime();
+  const X = d => L + (new Date(d).getTime() - t0) / Math.max(1, t1 - t0) * (W - L - R);
+  const Y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Peso ao longo do tempo">`;
+  for (let g = 0; g <= 4; g++) {
+    const v = lo + (hi - lo) * g / 4;
+    svg += `<line class="grid-line" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/>
+      <text class="axis-text" x="2" y="${Y(v)+4.5}">${v.toFixed(0)}</text>`;
+  }
+  // linha da meta
+  if (cfg.metaPeso > lo && cfg.metaPeso < hi) {
+    svg += `<line x1="${L}" x2="${W-R}" y1="${Y(cfg.metaPeso)}" y2="${Y(cfg.metaPeso)}"
+      stroke="var(--good)" stroke-width="1.5" stroke-dasharray="6 4" opacity=".8"/>
+      <text class="axis-text" x="${W-R}" y="${Y(cfg.metaPeso)-6}" text-anchor="end"
+      fill="var(--good)">meta ${cfg.metaPeso} kg</text>`;
+  }
+  // pontos e linha
+  svg += `<path d="${PESO.map((p,i) => (i?"L":"M") + X(p.date).toFixed(1) + " " +
+    Y(p.kg).toFixed(1)).join(" ")}" fill="none" stroke="var(--s1)" stroke-width="2"
+    stroke-linejoin="round"/>`;
+  // reta de tendência
+  if (ritmo) {
+    const dIni = -cfg.tendDias, dFim = 0;
+    const yIni = ritmo.intercepto + ritmo.porDia * dIni;
+    const yFim = ritmo.intercepto + ritmo.porDia * dFim;
+    const dataIni = new Date(t1 + dIni * 86400000).toISOString().slice(0, 10);
+    if (new Date(dataIni) >= new Date(PESO[0].date))
+      svg += `<line x1="${X(dataIni)}" y1="${Y(yIni)}" x2="${X(atual.date)}" y2="${Y(yFim)}"
+        stroke="var(--s3)" stroke-width="2" stroke-dasharray="4 3" opacity=".9"/>`;
+  }
+  for (const p of PESO)
+    svg += `<circle cx="${X(p.date).toFixed(1)}" cy="${Y(p.kg).toFixed(1)}" r="2.6"
+      fill="var(--s1)" data-tip="${esc(`<b>${p.date}</b><div>peso: <b>${p.kg.toFixed(1)} kg</b></div>`)}"/>`;
+  const meses = [...new Set(PESO.map(p => p.date.slice(0, 7)))];
+  const passo = Math.max(1, Math.ceil(meses.length / 5));
+  meses.forEach((mes, i) => { if (i % passo === 0)
+    svg += `<text class="axis-text" x="${X(mes + "-01")}" y="${H-8}"
+      text-anchor="middle">${mes.slice(2)}</text>`; });
+  svg += `</svg>`;
+
+  const legenda = `<div class="legend">
+    <span><i style="background:var(--s1)"></i>pesagens</span>
+    <span><i style="background:var(--s3)"></i>tendência de ${cfg.tendDias} dias</span>
+    <span><i style="background:var(--good)"></i>meta</span></div>`;
+  document.getElementById("peso-chart").innerHTML =
+    chartFrame("Peso registrado", `${PESO.length} pesagens`, legenda, svg);
+  document.querySelectorAll("#peso-chart [data-tip]").forEach(el => {
+    el.addEventListener("mousemove", e => showTip(el.dataset.tip, e));
+    el.addEventListener("mouseleave", hideTip);
+  });
+}
+
 function renderFormulas(r) {
   const bal = r.balance || balanceScore();
   const debt = sleepDebt();
@@ -497,6 +616,15 @@ function renderFormulas(r) {
        = <b>${fmt(debt.hours,2)} h</b> em ${debt.nights} noites<br>
        dormido = total_in_bed_time_milli − total_awake_time_milli<br>
        sleep_needed = baseline + dívida + strain recente + cochilo, todos do WHOOP`);
+  }
+  const rp = ritmoPeso();
+  if (rp) {
+    html += box("Ritmo de perda de peso e projeção da meta",
+      `reta dos mínimos quadrados sobre as ${rp.n} pesagens dos últimos
+       ${cfg.tendDias} dias<br>
+       ritmo = <b>${fmt(rp.porMes, 2)} kg por mês</b><br>
+       projeção = (peso atual − meta) ÷ ritmo diário<br>
+       supõe que o ritmo continua constante, o que quase nunca acontece perto do fim`);
   }
   html += box("Comparação com a sua linha de base",
     `média e desvio padrão dos últimos ${cfg.baselineDays} dias, excluindo o dia atual;
@@ -598,7 +726,7 @@ function renderKnobs() {
 function render() {
   const r = readiness();
   renderVerdict(r); renderOrb(r); renderRail(r);
-  renderFormulas(r); renderCharts();
+  renderFormulas(r); renderCharts(); renderPeso();
 }
 
 renderKnobs();

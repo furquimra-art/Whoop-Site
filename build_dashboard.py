@@ -20,10 +20,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DATA_FILE = ROOT / "whoop_data.json"
+WEIGHT_FILE = ROOT / "whoop_weight.json"
 OUT_FILE = ROOT / "dashboard" / "index.html"
 ORB_FILE = ROOT / "dashboard" / "orb-reference.html"
 
 MS_PER_HOUR = 3_600_000
+
+
+def read_weight_log() -> list:
+    if not WEIGHT_FILE.exists():
+        return []
+    try:
+        return json.loads(WEIGHT_FILE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
 
 
 # --------------------------------------------------------------------------- #
@@ -207,6 +217,9 @@ def demo_data() -> dict:
         "sleep": history["activity/sleep"],
         "workouts": history["activity/workout"],
         "profile": {}, "errors": {},
+        "weight_log": [{"date": f"2026-0{3 + i // 4}-{1 + (i % 4) * 7:02d}",
+                        "weight_kilogram": round(84 - i * 0.35, 1),
+                        "source": "demo"} for i in range(12)],
         "body_measurement": {"height_meter": 1.78, "weight_kilogram": 76.4,
                              "max_heart_rate": 191},
         "counts": {k: len(v) for k, v in history.items()},
@@ -242,6 +255,7 @@ def main() -> int:
             "weight_kilogram": body.get("weight_kilogram"),
             "max_heart_rate": body.get("max_heart_rate"),
         },
+        "weight_log": data.get("weight_log") or read_weight_log(),
         "counts": data.get("counts") or {},
         "errors": data.get("errors") or {},
     }
