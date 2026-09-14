@@ -25,9 +25,17 @@ Baseado no passo a passo do usuário (guia WHOOP API + Prompt 1 + Prompt 2).
 
 ## Respostas da entrevista (em andamento)
 
-**1. Objetivo.** 76 kg até dezembro de 2026, com o máximo de músculo. Hoje 79,9 kg.
-Já esteve em 76 kg em 2022, correndo todo dia. Recuperou todo o peso ao parar de
-correr, chegando a 93,4 kg em agosto de 2025.
+**1. Objetivo.** 75 kg até 11/12/2026, com o máximo de músculo (meta refinada em
+14/09/2026; antes era 76 kg "até dezembro", sem dia fixo). Peso na última pesagem:
+79,9 kg (12/09/26). Já esteve em 76 kg em 2022, correndo todo dia. Recuperou todo
+o peso ao parar de correr, chegando a 93,4 kg em agosto de 2025.
+
+De 14/09/26 a 11/12/26 são 88 dias (12,6 semanas). Faltam 4,9 kg. Isso pede
+≈ 0,39 kg/semana (≈ 1,7 kg/mês) — quase o dobro do ritmo medido até aqui
+(≈ 0,87 kg/mês). O cardio matinal novo ajuda, mas sozinho não fecha essa conta;
+a diferença depende principalmente de déficit calórico, que o WHOOP não mede.
+O dashboard agora tem uma data-alvo configurável (`dataMeta`, padrão 11/12/2026)
+que compara o ritmo necessário com o ritmo real e sinaliza se está no prazo.
 
 **2. Semana atual.** Musculação de segunda a sexta, 60 a 90 min, por volta das 16h.
 Plano novo: cardio pela manhã às 8h30, zonas 1 a 3, 20 min nos próximos 30 dias,

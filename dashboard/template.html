@@ -181,6 +181,7 @@ const CONFIG = [
   {key:"window", label:"Dias visíveis nos gráficos", min:14, max:400, step:7, value:120, unit:" d"},
   {key:"mediasMes", label:"Mostrar a média de cada mês", tipo:"bool", value:1},
   {key:"metaPeso", label:"Peso que você quer atingir", min:60, max:95, step:0.5, value:75, unit:" kg"},
+  {key:"dataMeta", label:"Data-alvo para chegar lá", tipo:"date", value:"2026-12-11"},
   {key:"tendDias", label:"Janela para calcular o ritmo de perda", min:30, max:365, step:15, value:90, unit:" d"},
 ];
 const cfg = {};
@@ -635,16 +636,35 @@ function renderPeso() {
     atual.kg < pico.kg ? "up" : "down"));
   tiles.push(tile("Falta para a meta", fmt(Math.abs(falta), 1) + " kg",
     `meta de ${fmt(cfg.metaPeso, 1)} kg`));
+  const diasParaMeta = Math.round(diasEntre(atual.date, cfg.dataMeta));
+  const semanasParaMeta = diasParaMeta / 7;
+  const ritmoNecessario = (diasParaMeta > 0 && falta > 0) ? falta / semanasParaMeta : null;
+  const ritmoAtualSemana = ritmo ? -ritmo.porDia * 7 : null;
+
   if (ritmo) {
-    tiles.push(tile("Ritmo atual", fmt(ritmo.porMes, 2) + " kg/mês",
-      `reta sobre ${ritmo.n} pesagens em ${cfg.tendDias} d`,
-      ritmo.porMes < 0 ? "up" : ""));
+    let clsRitmo = ritmo.porMes < 0 ? "up" : "";
+    let notaRitmo = `reta sobre ${ritmo.n} pesagens em ${cfg.tendDias} d`;
+    if (ritmoNecessario !== null && ritmoAtualSemana !== null) {
+      const noAlvo = ritmoAtualSemana >= ritmoNecessario;
+      clsRitmo = noAlvo ? "up" : "down";
+      notaRitmo = `${fmt(ritmoAtualSemana, 2)} kg/semana — ` +
+        `${noAlvo ? "no ritmo" : "abaixo do necessário"} para a meta`;
+    }
+    tiles.push(tile("Ritmo atual", fmt(ritmo.porMes, 2) + " kg/mês", notaRitmo, clsRitmo));
     if (ritmo.porDia < -0.0001 && falta > 0) {
       const dias = Math.round(falta / -ritmo.porDia);
       const quando = new Date(new Date(atual.date).getTime() + dias * 86400000);
-      tiles.push(tile("Projeção da meta", dataBR(isoDe(quando)),
-        `${dias} dias mantendo o ritmo`));
+      const noPrazo = diasParaMeta > 0 ? dias <= diasParaMeta : null;
+      tiles.push(tile("Projeção no ritmo atual", dataBR(isoDe(quando)),
+        `${dias} dias mantendo o ritmo` +
+        (noPrazo === null ? "" : noPrazo ? " — dentro do prazo" : " — depois do prazo"),
+        noPrazo === null ? "" : noPrazo ? "up" : "down"));
     }
+  }
+  if (ritmoNecessario !== null) {
+    tiles.push(tile("Ritmo necessário", fmt(ritmoNecessario, 2) + " kg/semana",
+      `para ${fmt(cfg.metaPeso, 1)} kg até ${dataBR(cfg.dataMeta)} (${diasParaMeta} dias, ` +
+      `${(semanasParaMeta).toFixed(1)} semanas)`));
   }
   document.getElementById("peso-rail").innerHTML = tiles.join("");
 
@@ -800,6 +820,11 @@ function renderFormulas(r) {
        projeção = (peso atual − meta) ÷ ritmo diário<br>
        supõe que o ritmo continua constante, o que quase nunca acontece perto do fim`);
   }
+  html += box("Ritmo necessário até a data-alvo",
+    `ritmo necessário = (peso atual − meta) ÷ semanas até a data-alvo<br>
+     semanas até a data-alvo = (data-alvo − data da última pesagem) ÷ 7<br>
+     comparado ao ritmo atual (mesma reta acima, convertida para kg/semana);
+     "no ritmo" só quando o atual já alcança ou supera o necessário`);
   html += box("Comparação com a sua linha de base",
     `média e desvio padrão dos últimos ${cfg.baselineDays} dias, excluindo o dia atual;
      a seta só fica colorida quando a diferença passa de 0,35 desvio padrão`);
@@ -890,6 +915,14 @@ function renderKnobs() {
          <input type="checkbox" id="k-${c.key}" ${c.value ? "checked" : ""}
            style="width:16px;height:16px;accent-color:var(--s1)">
          ${c.label}</label></div>`
+    : c.tipo === "date"
+    ? `<div class="knob">
+      <label for="k-${c.key}">${c.label}:
+        <span class="val" id="v-${c.key}">${dataBR(c.value)}</span></label>
+      <input type="date" id="k-${c.key}" value="${c.value}"
+        style="font:inherit;background:var(--surface-2);color:var(--ink);
+        border:1px solid var(--line);border-radius:6px;padding:5px 8px">
+    </div>`
     : `<div class="knob">
       <label for="k-${c.key}">${c.label}:
         <span class="val" id="v-${c.key}">${c.value}${c.unit}</span></label>
@@ -900,6 +933,15 @@ function renderKnobs() {
     const el = document.getElementById("k-" + c.key);
     if (c.tipo === "bool") {
       el.addEventListener("change", e => { cfg[c.key] = e.target.checked ? 1 : 0; render(); });
+      return;
+    }
+    if (c.tipo === "date") {
+      el.addEventListener("change", e => {
+        if (!e.target.value) return;
+        cfg[c.key] = e.target.value;
+        document.getElementById("v-"+c.key).textContent = dataBR(cfg[c.key]);
+        render();
+      });
       return;
     }
     el.addEventListener("input", e => {
